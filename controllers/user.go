@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"./models"
+	"cbc-backend/models"
 	"encoding/json"
 
 	beego "github.com/beego/beego/v2/server/web"
@@ -92,15 +92,17 @@ func (u *UserController) Delete() {
 
 // @Title Login
 // @Description Logs user into the system
-// @Param	username		query 	string	true		"The username for login"
-// @Param	password		query 	string	true		"The password for login"
+// @Param	body	body	models.LoginRequest	true	"User login credentials"
 // @Success 200 {string} login success
 // @Failure 403 user not exist
-// @router /login [get]
+// @router /login [put]
 func (u *UserController) Login() {
-	username := u.GetString("username")
-	password := u.GetString("password")
-	if models.Login(username, password) {
+	var loginReq struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	json.Unmarshal(u.Ctx.Input.RequestBody, &loginReq)
+	if models.Login(loginReq.Username, loginReq.Password) {
 		u.Data["json"] = "login success"
 	} else {
 		u.Data["json"] = "user not exist"
@@ -117,3 +119,15 @@ func (u *UserController) Logout() {
 	u.ServeJSON()
 }
 
+// @Title Signup
+// @Description create new user account
+// @Param	body	body	models.User	true	"User signup info"
+// @Success 200 {string} models.User.Id
+// @router /signup [post]
+func (u *UserController) Signup() {
+	var user models.User
+	json.Unmarshal(u.Ctx.Input.RequestBody, &user)
+	uid := models.AddUser(user)
+	u.Data["json"] = map[string]string{"uid": uid}
+	u.ServeJSON()
+}

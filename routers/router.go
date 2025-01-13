@@ -1,23 +1,32 @@
 // @APIVersion 1.0.0
-// @Title beego Test API
-// @Description beego has a very cool tools to autogenerate documents for your API
-// @Contact astaxie@gmail.com
-// @TermsOfServiceUrl http://beego.me/
-// @License Apache 2.0
-// @LicenseUrl http://www.apache.org/licenses/LICENSE-2.0.html
+// @Title Teaching App API
+// @Description Teaching resources and jobs API
 package routers
 
 import (
-	"./controllers"
+	"cbc-backend/controllers"
+
+	"fmt"
 
 	beego "github.com/beego/beego/v2/server/web"
 )
 
 func init() {
+	fmt.Println("Initializing routes...")
+
+	// Register direct routes
+	beego.Router("/v1/resources", &controllers.ResourceController{}, "get:Get;post:Post")
+
+	// Register namespace routes
 	ns := beego.NewNamespace("/v1",
-		beego.NSNamespace("/object",
+		beego.NSNamespace("/resources",
 			beego.NSInclude(
-				&controllers.ObjectController{},
+				&controllers.ResourceController{},
+			),
+		),
+		beego.NSNamespace("/jobs",
+			beego.NSInclude(
+				&controllers.JobController{},
 			),
 		),
 		beego.NSNamespace("/user",
@@ -27,4 +36,12 @@ func init() {
 		),
 	)
 	beego.AddNamespace(ns)
+
+	// Print registered routes
+	fmt.Println("Registered routes:")
+	fmt.Println("- GET, POST /v1/resources")
+	fmt.Println("- GET, POST /v1/jobs")
+	fmt.Println("- GET, POST /v1/user")
+
+	fmt.Println("Routes initialized")
 }

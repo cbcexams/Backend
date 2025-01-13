@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	"./models"
+	"cbc-backend/models"
 	"encoding/json"
 
 	beego "github.com/beego/beego/v2/server/web"
@@ -89,4 +89,3 @@ func (o *ObjectController) Delete() {
 	o.Data["json"] = "delete success!"
 	o.ServeJSON()
 }
-
