@@ -6,24 +6,28 @@ A RESTful API backend service for managing CBC (Competency-Based Curriculum) edu
 
 This backend service provides APIs for managing educational resources, user accounts, and job postings. It's built using the Beego framework and PostgreSQL database, focusing on serving CBC-related content to educational institutions.
 
+---
+
 ## Features
 
 ### Resource Management
-- Upload educational resources (PDF, DOC, DOCX, TXT, RTF)
-- Search resources by title, level, and description
-- Paginated resource listing (20 items per page)
-- File type validation
-- Automatic file storage management
+- Upload educational resources (PDF, DOC, DOCX, TXT, RTF).
+- Search resources by title, level, and description.
+- Paginated resource listing (20 items per page).
+- File type validation.
+- Automatic file storage management.
 
 ### User Management
-- User registration and authentication
-- Profile management
-- Role-based access control
+- User registration and authentication.
+- Profile management.
+- Role-based access control.
 
 ### Job Portal
-- Post teaching and educational jobs
-- Search and filter job listings
-- Job application management
+- Post teaching and educational jobs.
+- Search and filter job listings.
+- Manage job applications.
+
+---
 
 ## Technical Stack
 
@@ -31,100 +35,141 @@ This backend service provides APIs for managing educational resources, user acco
 - **Database**: PostgreSQL
 - **Language**: Go 1.23
 - **Authentication**: JWT (JSON Web Tokens)
-- **Documentation**:
+- **Documentation**: Swagger (to be added)
+
+---
 
 ## API Endpoints
 
 ### Resources
-GET /v1/resources
-Query Parameters:
-level: Filter by educational level
-title: Search in resource titles
-description: Search in resource descriptions
-page: Page number for pagination (default: 1)
-Response includes pagination metadata
 
-POST /v1/resources
-Multipart form data:
-title: Resource title
-description: Resource description
-level: Educational level
-file: Resource file (PDF/DOC/DOCX/TXT/RTF only)
+#### List Resources
+**GET** `/v1/resources`
+
+**Query Parameters:**
+- `level`: Filter by educational level.
+- `title`: Search in resource titles.
+- `description`: Search in resource descriptions.
+- `page`: Page number for pagination (default: 1).
+
+**Response:**
+- Includes pagination metadata.
+
+#### Upload Resource
+**POST** `/v1/resources`
+
+**Multipart Form Data:**
+- `title`: Resource title.
+- `description`: Resource description.
+- `level`: Educational level.
+- `file`: Resource file (PDF/DOC/DOCX/TXT/RTF only).
 
 ### Users
-POST /v1/user/signup
-POST /v1/user/login
-GET /v1/user/logout
-PUT /v1/user/:uid
-DELETE /v1/user/:uid
+
+#### Sign Up
+**POST** `/v1/user/signup`
+
+#### Log In
+**POST** `/v1/user/login`
+
+#### Log Out
+**GET** `/v1/user/logout`
+
+#### Update User
+**PUT** `/v1/user/:uid`
+
+#### Delete User
+**DELETE** `/v1/user/:uid`
 
 ### Jobs
-GET /v1/jobs
-POST /v1/jobs
 
+#### List Jobs
+**GET** `/v1/jobs`
+
+#### Post Job
+**POST** `/v1/jobs`
+
+---
 
 ## Setup and Installation
 
-1. Prerequisites:
-   ```bash
-   - Go 1.23 or higher
-   - PostgreSQL
-   ```
+### Prerequisites
 
-2. Database Setup:
-   ```sql
-   CREATE DATABASE cbcexams;
-   ```
+- Go 1.23 or higher.
+- PostgreSQL.
 
-3. Configuration:
-   ```bash
-   # Update conf/app.conf with your database credentials
-   sqlconn = "user=postgres password=your_password dbname=cbcexams sslmode=disable"
-   ```
+### Database Setup
 
-4. Install Dependencies:
-   ```bash
-   go mod tidy
-   ```
+Run the following SQL command to create the database:
+```sql
+CREATE DATABASE cbcexams;
+```
 
-5. Run the Application:
-   ```bash
-   go run main.go
-   ```
+### Configuration
+
+Update the `conf/app.conf` file with your database credentials:
+```bash
+sqlconn = "user=postgres password=your_password dbname=cbcexams sslmode=disable"
+```
+
+### Install Dependencies
+
+Run the following command to install dependencies:
+```bash
+go mod tidy
+```
+
+### Run the Application
+
+Start the server with:
+```bash
+go run main.go
+```
+
+---
 
 ## Project Structure
 
+```
 ├── conf/
-│ └── app.conf
+│   └── app.conf
 ├── controllers/
-│ ├── resource.go
-│ ├── user.go
-│ └── job.go
+│   ├── resource.go
+│   ├── user.go
+│   └── job.go
 ├── models/
-│ ├── db.go
-│ ├── resource.go
-│ ├── user.go
-│ └── job.go
+│   ├── db.go
+│   ├── resource.go
+│   ├── user.go
+│   └── job.go
 ├── routers/
-│ └── router.go
-├── uploads/ # Resource files storage
+│   └── router.go
+├── uploads/  # Resource files storage
 ├── main.go
 └── README.md
+```
+
+---
 
 ## Development
 
-- Run tests:
-  ```bash
-  go test ./tests
-  ```
+### Run Tests
 
-- Generate Swagger documentation:
-  ```bash
-  bee generate docs
-  ```
+Run tests using:
+```bash
+go test ./tests
+```
+
+### Generate Swagger Documentation
+
+Generate API documentation with:
+```bash
+bee generate docs
+```
+
+---
 
 ## API Documentation
 
-To be added
-
+To be added.
 
