@@ -23,8 +23,12 @@ func init() {
 		return
 	}
 
-	// Register model
-	orm.RegisterModel(new(Resource))
+	// Register models
+	orm.RegisterModel(
+		new(User),
+		new(Resource),
+		new(Job),
+	)
 
 	// Test database connection
 	o := orm.NewOrm()
@@ -36,7 +40,7 @@ func init() {
 	}
 	fmt.Println("Database connection successful!")
 
-	// Create table
+	// Create tables
 	err = orm.RunSyncdb("default", false, true)
 	if err != nil {
 		fmt.Printf("Failed to sync database: %v\n", err)

@@ -2,85 +2,88 @@ package models
 
 import (
 	"errors"
-	"strconv"
 	"time"
-)
 
-var (
-	UserList map[string]*User
+	"github.com/beego/beego/v2/client/orm"
+	"github.com/dgrijalva/jwt-go"
+	"golang.org/x/crypto/bcrypt"
 )
-
-func init() {
-	UserList = make(map[string]*User)
-	u := User{"user_11111", "astaxie", "11111", Profile{"male", 20, "Singapore", "astaxie@gmail.com"}}
-	UserList["user_11111"] = &u
-}
 
 type User struct {
-	Id       string
-	Username string
-	Password string
-	Profile  Profile
+	Id        int       `orm:"pk;auto" json:"id"`
+	Username  string    `orm:"size(128);unique" json:"username"`
+	Password  string    `orm:"size(128)" json:"-"`
+	Email     string    `orm:"size(128);unique" json:"email"`
+	Role      string    `orm:"size(20)" json:"role"` // admin, teacher, student
+	CreatedAt time.Time `orm:"auto_now_add;type(timestamp)" json:"created_at"`
 }
 
-type Profile struct {
-	Gender  string
-	Age     int
-	Address string
-	Email   string
-}
-
-func AddUser(u User) string {
-	u.Id = "user_" + strconv.FormatInt(time.Now().UnixNano(), 10)
-	UserList[u.Id] = &u
-	return u.Id
-}
-
-func GetUser(uid string) (u *User, err error) {
-	if u, ok := UserList[uid]; ok {
-		return u, nil
+func (u *User) HashPassword() error {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
 	}
-	return nil, errors.New("User not exists")
+	u.Password = string(hashedPassword)
+	return nil
 }
 
-func GetAllUsers() map[string]*User {
-	return UserList
+func (u *User) ValidatePassword(password string) error {
+	return bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
 }
 
-func UpdateUser(uid string, uu *User) (a *User, err error) {
-	if u, ok := UserList[uid]; ok {
-		if uu.Username != "" {
-			u.Username = uu.Username
-		}
-		if uu.Password != "" {
-			u.Password = uu.Password
-		}
-		if uu.Profile.Age != 0 {
-			u.Profile.Age = uu.Profile.Age
-		}
-		if uu.Profile.Address != "" {
-			u.Profile.Address = uu.Profile.Address
-		}
-		if uu.Profile.Gender != "" {
-			u.Profile.Gender = uu.Profile.Gender
-		}
-		if uu.Profile.Email != "" {
-			u.Profile.Email = uu.Profile.Email
-		}
-		return u, nil
+func (u *User) GenerateToken() (string, error) {
+	token := jwt.New(jwt.SigningMethodHS256)
+	claims := token.Claims.(jwt.MapClaims)
+	claims["username"] = u.Username
+	claims["role"] = u.Role
+	claims["exp"] = time.Now().Add(time.Hour * 24).Unix()
+
+	tokenString, err := token.SignedString([]byte("your-secret-key")) // Use environment variable in production
+	if err != nil {
+		return "", err
 	}
-	return nil, errors.New("User Not Exist")
+
+	return tokenString, nil
 }
 
-func Login(username, password string) bool {
-	for _, u := range UserList {
-		if u.Username == username && u.Password == password {
-			return true
-		}
+func AddUser(user *User) error {
+	if err := user.HashPassword(); err != nil {
+		return err
 	}
-	return false
+
+	o := orm.NewOrm()
+	_, err := o.Insert(user)
+	return err
 }
 
-func DeleteUser(uid string) {
-	delete(UserList, uid)
+func GetUser(username string) (*User, error) {
+	o := orm.NewOrm()
+	user := User{Username: username}
+	err := o.Read(&user, "Username")
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func UpdateUser(user *User) error {
+	o := orm.NewOrm()
+	_, err := o.Update(user)
+	return err
+}
+
+func DeleteUser(username string) error {
+	o := orm.NewOrm()
+	_, err := o.Delete(&User{Username: username})
+	return err
+}
+
+func ValidateToken(tokenString string) (*jwt.Token, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.StandardClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte("your-secret-key"), nil
+	})
+	return token, err
 }

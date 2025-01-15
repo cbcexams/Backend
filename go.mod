@@ -6,6 +6,7 @@ require (
 	github.com/beego/beego/v2 v2.1.0
 	github.com/lib/pq v1.10.9
 	github.com/smartystreets/goconvey v1.6.4
+	github.com/stretchr/testify v1.8.4
 )
 
 require (

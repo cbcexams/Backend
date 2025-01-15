@@ -5,6 +5,7 @@ package routers
 
 import (
 	"cbc-backend/controllers"
+	"cbc-backend/middleware"
 
 	"fmt"
 
@@ -14,8 +15,12 @@ import (
 func init() {
 	fmt.Println("Initializing routes...")
 
+	// Add JWT middleware
+	beego.InsertFilter("/v1/*", beego.BeforeRouter, middleware.JWT)
+
 	// Register direct routes
 	beego.Router("/v1/resources", &controllers.ResourceController{}, "get:Get;post:Post")
+	beego.Router("/v1/jobs", &controllers.JobController{}, "get:Get;post:Post")
 
 	// Register namespace routes
 	ns := beego.NewNamespace("/v1",
@@ -36,12 +41,6 @@ func init() {
 		),
 	)
 	beego.AddNamespace(ns)
-
-	// Print registered routes
-	fmt.Println("Registered routes:")
-	fmt.Println("- GET, POST /v1/resources")
-	fmt.Println("- GET, POST /v1/jobs")
-	fmt.Println("- GET, POST /v1/user")
 
 	fmt.Println("Routes initialized")
 }

@@ -3,6 +3,7 @@ package controllers
 import (
 	"cbc-backend/models"
 	"encoding/json"
+	"fmt"
 
 	beego "github.com/beego/beego/v2/server/web"
 )
@@ -91,21 +92,62 @@ func (u *UserController) Delete() {
 }
 
 // @Title Login
-// @Description Logs user into the system
-// @Param	body	body	models.LoginRequest	true	"User login credentials"
-// @Success 200 {string} login success
+// @Description user login
+// @Param	body	body	models.User	true	"Username and password"
+// @Success 200 {string} token
 // @Failure 403 user not exist
-// @router /login [put]
+// @router /login [post]
 func (u *UserController) Login() {
-	var loginReq struct {
+	var loginInfo struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
-	json.Unmarshal(u.Ctx.Input.RequestBody, &loginReq)
-	if models.Login(loginReq.Username, loginReq.Password) {
-		u.Data["json"] = "login success"
-	} else {
-		u.Data["json"] = "user not exist"
+
+	err := json.Unmarshal(u.Ctx.Input.RequestBody, &loginInfo)
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": "Invalid request body"}
+		u.ServeJSON()
+		return
+	}
+
+	user, err := models.GetUser(loginInfo.Username)
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": "User not found"}
+		u.ServeJSON()
+		return
+	}
+
+	if err := user.ValidatePassword(loginInfo.Password); err != nil {
+		u.Data["json"] = map[string]string{"error": "Invalid password"}
+		u.ServeJSON()
+		return
+	}
+
+	token, err := user.GenerateToken()
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+		u.ServeJSON()
+		return
+	}
+
+	// Get session ID from request
+	sessionID := u.Ctx.Input.Cookie("session_id")
+	if sessionID == "" {
+		sessionID = u.Ctx.Input.Header("X-Session-ID")
+	}
+
+	// Link session to user if session exists
+	if sessionID != "" {
+		err = models.LinkSessionToUser(sessionID, user.Id)
+		if err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Failed to link session to user: %v\n", err)
+		}
+	}
+
+	u.Data["json"] = map[string]interface{}{
+		"token":      token,
+		"session_id": sessionID,
 	}
 	u.ServeJSON()
 }
@@ -120,14 +162,52 @@ func (u *UserController) Logout() {
 }
 
 // @Title Signup
-// @Description create new user account
-// @Param	body	body	models.User	true	"User signup info"
-// @Success 200 {string} models.User.Id
+// @Description create new user
+// @Param	body	body	models.User	true	"User info"
+// @Success 200 {string} token
+// @Failure 403 body is empty
 // @router /signup [post]
 func (u *UserController) Signup() {
 	var user models.User
-	json.Unmarshal(u.Ctx.Input.RequestBody, &user)
-	uid := models.AddUser(user)
-	u.Data["json"] = map[string]string{"uid": uid}
+	err := json.Unmarshal(u.Ctx.Input.RequestBody, &user)
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": "Invalid request body"}
+		u.ServeJSON()
+		return
+	}
+
+	err = models.AddUser(&user)
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+		u.ServeJSON()
+		return
+	}
+
+	token, err := user.GenerateToken()
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+		u.ServeJSON()
+		return
+	}
+
+	// Get session ID from request
+	sessionID := u.Ctx.Input.Cookie("session_id")
+	if sessionID == "" {
+		sessionID = u.Ctx.Input.Header("X-Session-ID")
+	}
+
+	// Link session to user if session exists
+	if sessionID != "" {
+		err = models.LinkSessionToUser(sessionID, user.Id)
+		if err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("Failed to link session to user: %v\n", err)
+		}
+	}
+
+	u.Data["json"] = map[string]interface{}{
+		"token":      token,
+		"session_id": sessionID,
+	}
 	u.ServeJSON()
 }

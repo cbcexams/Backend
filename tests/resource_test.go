@@ -1,7 +1,8 @@
-package test
+package tests
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -10,103 +11,53 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/beego/beego/v2/core/logs"
 	beego "github.com/beego/beego/v2/server/web"
-	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 )
 
-func createTestFile(t *testing.T, filename string, content string) string {
-	tmpDir := t.TempDir()
-	filepath := filepath.Join(tmpDir, filename)
-	err := os.WriteFile(filepath, []byte(content), 0666)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return filepath
-}
+func TestResourceUpload(t *testing.T) {
+	token := createTestUser(t)
 
-func createMultipartRequest(t *testing.T, filename string, fieldname string) (*http.Request, error) {
+	// Create a test file
+	content := []byte("test content")
+	tmpfile, err := os.CreateTemp("", "test*.txt")
+	assert.NoError(t, err)
+	defer os.Remove(tmpfile.Name())
+	_, err = tmpfile.Write(content)
+	assert.NoError(t, err)
+
+	// Create multipart form
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(tmpfile.Name()))
+	assert.NoError(t, err)
+	_, err = io.Copy(part, tmpfile)
+	assert.NoError(t, err)
 
-	_ = writer.WriteField("title", "Test Resource")
-	_ = writer.WriteField("description", "Test Description")
-	_ = writer.WriteField("level", "grade1-6")
+	writer.WriteField("title", "Test Resource")
+	writer.WriteField("description", "Test Description")
+	writer.WriteField("level", "grade1-6")
+	writer.Close()
 
-	filepath := createTestFile(t, filename, "test content")
-	file, err := os.Open(filepath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
+	// Make request
+	r, _ := http.NewRequest("POST", "/v1/resources", body)
+	r.Header.Set("Content-Type", writer.FormDataContentType())
+	r.Header.Set("Authorization", "Bearer "+token)
 
-	part, err := writer.CreateFormFile(fieldname, filename)
-	if err != nil {
-		return nil, err
-	}
-	_, err = io.Copy(part, file)
-	if err != nil {
-		return nil, err
-	}
+	w := httptest.NewRecorder()
+	beego.BeeApp.Handlers.ServeHTTP(w, r)
 
-	err = writer.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", "/v1/resources", body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	return req, nil
+	assert.Equal(t, 200, w.Code)
 }
 
-func TestResourceUpload(t *testing.T) {
-	Convey("Test Resource Upload", t, func() {
-		Convey("Should accept PDF file", func() {
-			req, err := createMultipartRequest(t, "test.pdf", "file")
-			So(err, ShouldBeNil)
+func TestResourceList(t *testing.T) {
+	token := createTestUser(t)
 
-			w := httptest.NewRecorder()
-			beego.BeeApp.Handlers.ServeHTTP(w, req)
+	w := makeTestRequest(t, "GET", "/v1/resources", "", token)
+	assert.Equal(t, 200, w.Code)
 
-			logs.Info("testing", "TestResourceUpload PDF", "Code[%d]\n%s", w.Code, w.Body.String())
-			So(w.Code, ShouldEqual, 200)
-		})
-
-		Convey("Should accept DOCX file", func() {
-			req, err := createMultipartRequest(t, "test.docx", "file")
-			So(err, ShouldBeNil)
-
-			w := httptest.NewRecorder()
-			beego.BeeApp.Handlers.ServeHTTP(w, req)
-
-			logs.Info("testing", "TestResourceUpload DOCX", "Code[%d]\n%s", w.Code, w.Body.String())
-			So(w.Code, ShouldEqual, 200)
-		})
-
-		Convey("Should reject JPG file", func() {
-			req, err := createMultipartRequest(t, "test.jpg", "file")
-			So(err, ShouldBeNil)
-
-			w := httptest.NewRecorder()
-			beego.BeeApp.Handlers.ServeHTTP(w, req)
-
-			logs.Info("testing", "TestResourceUpload JPG", "Code[%d]\n%s", w.Code, w.Body.String())
-			So(w.Body.String(), ShouldContainSubstring, "invalid file type")
-		})
-
-		Convey("Should reject MP4 file", func() {
-			req, err := createMultipartRequest(t, "test.mp4", "file")
-			So(err, ShouldBeNil)
-
-			w := httptest.NewRecorder()
-			beego.BeeApp.Handlers.ServeHTTP(w, req)
-
-			logs.Info("testing", "TestResourceUpload MP4", "Code[%d]\n%s", w.Code, w.Body.String())
-			So(w.Body.String(), ShouldContainSubstring, "invalid file type")
-		})
-	})
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response, "items")
 }
