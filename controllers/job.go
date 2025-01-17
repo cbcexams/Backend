@@ -2,8 +2,9 @@ package controllers
 
 import (
 	"cbc-backend/models"
+	"cbc-backend/utils"
 	"encoding/json"
-	"fmt"
+	"strconv"
 
 	beego "github.com/beego/beego/v2/server/web"
 )
@@ -12,64 +13,100 @@ type JobController struct {
 	beego.Controller
 }
 
-// @Title Get
-// @Description get jobs with pagination and filters
-// @Param	title	query	string	false	"Job title search"
-// @Param	type	query	string	false	"Job type (Full-time, Part-time, Contract)"
-// @Param	location	query	string	false	"Job location"
-// @Param	page	query	int	false	"Page number (default: 1)"
-// @Success 200 {object} models.JobPagination
-// @router / [get]
-func (j *JobController) Get() {
-	fmt.Println("Job Get method called")
+// Get retrieves a list of jobs
+func (c *JobController) Get() {
+	page, _ := c.GetInt("page", 1)
+	title := c.GetString("title")
+	jobType := c.GetString("type")
+	location := c.GetString("location")
 
-	params := make(map[string]string)
-	params["title"] = j.GetString("title")
-	params["type"] = j.GetString("type")
-	params["location"] = j.GetString("location")
-
-	page, err := j.GetInt("page")
-	if err != nil {
-		page = 1
+	params := map[string]string{
+		"title":    title,
+		"type":     jobType,
+		"location": location,
 	}
 
-	fmt.Printf("Search params: %v, Page: %d\n", params, page)
-
-	result, err := models.SearchJobs(params, page)
+	pagination, err := models.SearchJobs(params, page)
 	if err != nil {
-		fmt.Printf("Error getting jobs: %v\n", err)
-		j.Data["json"] = map[string]string{"error": err.Error()}
-	} else {
-		fmt.Printf("Successfully retrieved %d jobs (Page %d of %d)\n",
-			len(result.Items), result.CurrentPage, result.TotalPages)
-		j.Data["json"] = result
-	}
-	j.ServeJSON()
-}
-
-// @Title Post
-// @Description create new job posting
-// @Param	body	body	models.Job	true	"Job content"
-// @Success 200 {object} map[string]interface{}
-// @Failure 403 body is empty
-// @router / [post]
-func (j *JobController) Post() {
-	var job models.Job
-	err := json.Unmarshal(j.Ctx.Input.RequestBody, &job)
-	if err != nil {
-		j.Data["json"] = map[string]string{"error": "Invalid request body"}
-		j.ServeJSON()
+		utils.SendResponse(&c.Controller, false, "", nil, err)
 		return
 	}
 
-	id, err := models.AddJob(job)
+	utils.SendResponse(&c.Controller, true, "", pagination, nil)
+}
+
+// GetOne retrieves a single job by ID
+func (c *JobController) GetOne() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
 	if err != nil {
-		j.Data["json"] = map[string]string{"error": err.Error()}
-	} else {
-		j.Data["json"] = map[string]interface{}{
-			"id":      id,
-			"message": "Job created successfully",
-		}
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
 	}
-	j.ServeJSON()
+
+	job := models.Job{Id: id}
+	err = models.GetJob(&job)
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	utils.SendResponse(&c.Controller, true, "", job, nil)
+}
+
+// Post creates a new job
+func (c *JobController) Post() {
+	var job models.Job
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &job); err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	_, err := models.AddJob(job)
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	utils.SendResponse(&c.Controller, true, "Job created successfully", job, nil)
+}
+
+// Put updates an existing job
+func (c *JobController) Put() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	var job models.Job
+	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &job); err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	job.Id = id
+	err = models.UpdateJob(&job)
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	utils.SendResponse(&c.Controller, true, "Job updated successfully", job, nil)
+}
+
+// Delete removes a job
+func (c *JobController) Delete() {
+	id, err := strconv.Atoi(c.Ctx.Input.Param(":id"))
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	err = models.DeleteJob(id)
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "", nil, err)
+		return
+	}
+
+	utils.SendResponse(&c.Controller, true, "Job deleted successfully", nil, nil)
 }

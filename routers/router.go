@@ -13,34 +13,30 @@ import (
 )
 
 func init() {
-	fmt.Println("Initializing routes...")
+	fmt.Println("\n==================================================")
+	fmt.Println("              Router Initialization                ")
+	fmt.Println("==================================================")
 
-	// Add JWT middleware
-	beego.InsertFilter("/v1/*", beego.BeforeRouter, middleware.JWT)
-
-	// Register direct routes
-	beego.Router("/v1/resources", &controllers.ResourceController{}, "get:Get;post:Post")
-	beego.Router("/v1/jobs", &controllers.JobController{}, "get:Get;post:Post")
-
-	// Register namespace routes
+	// Create a namespace for v1 API
 	ns := beego.NewNamespace("/v1",
 		beego.NSNamespace("/resources",
-			beego.NSInclude(
-				&controllers.ResourceController{},
-			),
-		),
-		beego.NSNamespace("/jobs",
-			beego.NSInclude(
-				&controllers.JobController{},
-			),
-		),
-		beego.NSNamespace("/user",
-			beego.NSInclude(
-				&controllers.UserController{},
-			),
+			beego.NSRouter("/", &controllers.ResourceController{}, "get:Get"),
+			beego.NSRouter("/", &controllers.ResourceController{}, "post:Post"),
 		),
 	)
+
+	// Add namespace to beego
 	beego.AddNamespace(ns)
 
-	fmt.Println("Routes initialized")
+	// Print registered routes
+	fmt.Println("\nRegistered Routes:")
+	fmt.Printf("GET  /v1/resources\n")
+	fmt.Printf("POST /v1/resources\n")
+
+	// Add middleware
+	beego.InsertFilter("/*", beego.BeforeRouter, middleware.LoggerMiddleware)
+	beego.InsertFilter("/*", beego.BeforeRouter, middleware.JWTMiddleware)
+
+	fmt.Println("\nRouter initialization complete")
+	fmt.Println("==================================================\n")
 }

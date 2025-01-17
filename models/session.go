@@ -9,14 +9,14 @@ import (
 )
 
 type Session struct {
-	Id        string    `orm:"pk;size(64)" json:"id"`
-	UserId    int       `orm:"null" json:"user_id"`
+	Id        string    `orm:"pk;size(36)" json:"id"`
+	UserId    int       `orm:"column(user_id)" json:"user_id"`
 	CreatedAt time.Time `orm:"auto_now_add;type(timestamp)" json:"created_at"`
 	ExpiresAt time.Time `orm:"type(timestamp)" json:"expires_at"`
 }
 
-func init() {
-	orm.RegisterModel(new(Session))
+func (s *Session) TableName() string {
+	return "session"
 }
 
 // CreateSession creates a new session and returns the session ID

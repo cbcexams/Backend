@@ -27,10 +27,6 @@ type JobPagination struct {
 	Items       []*Job `json:"items"`
 }
 
-func init() {
-	orm.RegisterModel(new(Job))
-}
-
 func AddJob(job Job) (int64, error) {
 	o := orm.NewOrm()
 	id, err := o.Insert(&job)
@@ -90,4 +86,24 @@ func SearchJobs(params map[string]string, page int) (*JobPagination, error) {
 		PageSize:    JobPageSize,
 		Items:       jobs,
 	}, nil
+}
+
+// GetJob retrieves a single job by ID
+func GetJob(job *Job) error {
+	o := orm.NewOrm()
+	return o.Read(job)
+}
+
+// UpdateJob updates an existing job
+func UpdateJob(job *Job) error {
+	o := orm.NewOrm()
+	_, err := o.Update(job)
+	return err
+}
+
+// DeleteJob removes a job by ID
+func DeleteJob(id int) error {
+	o := orm.NewOrm()
+	_, err := o.Delete(&Job{Id: id})
+	return err
 }

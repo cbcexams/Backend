@@ -2,101 +2,127 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/beego/beego/v2/client/orm"
 )
 
+// Resource represents a teaching resource in the system
+// It maps to the web_crawler_resources table in the database
 type Resource struct {
-	Id          int       `orm:"pk;auto"`
-	Title       string    `orm:"size(100)"`
-	Description string    `orm:"type(text)"`
-	FilePath    string    `orm:"size(255)"`
-	Level       string    `orm:"size(20)"`
-	CreatedAt   time.Time `orm:"auto_now_add;type(timestamp)"`
+	Id                      string    `orm:"pk;column(id);type(uuid)" json:"id"`
+	ParentUrl               string    `orm:"column(parent_url);type(text);null" json:"parent_url"`
+	GoogleDriveDownloadLink string    `orm:"column(google_drive_download_link);type(text);unique;null" json:"google_drive_download_link"`
+	Name                    string    `orm:"column(name);type(text)" json:"name"`
+	RelativePath            string    `orm:"column(relative_path);type(text);unique" json:"relative_path"`
+	CreatedAt               time.Time `orm:"column(created_at);type(timestamp with time zone);auto_now_add" json:"created_at"`
+	DjangoRelativePath      string    `orm:"column(django_relative_path);type(text);unique;null" json:"django_relative_path"`
+	ParentDirectory         string    `orm:"column(parent_directory);type(text);null" json:"parent_directory"`
+	Categories              string    `orm:"column(categories);type(text);null" json:"categories"`
 }
 
-func AddResource(r Resource) (int64, error) {
-	o := orm.NewOrm()
-	id, err := o.Insert(&r)
-	return id, err
+// TableName specifies the database table name for the Resource model
+func (r *Resource) TableName() string {
+	return "web_crawler_resources"
 }
 
-func GetResourcesByLevel(level string) ([]*Resource, error) {
-	var resources []*Resource
-	o := orm.NewOrm()
-
-	query := o.QueryTable("resource")
-
-	// If level is provided, filter by it
-	if level != "" {
-		query = query.Filter("level", level)
+// GetCategories returns the categories as a slice
+// If Categories is empty, returns nil
+func (r *Resource) GetCategories() []string {
+	if r.Categories == "" {
+		return nil
 	}
+	return strings.Split(r.Categories, ",")
+}
 
-	// Order by created_at descending (newest first)
-	_, err := query.OrderBy("-created_at").All(&resources)
-
-	if err != nil {
-		fmt.Printf("Database query error: %v\n", err)
-		return nil, err
+// SetCategories sets the categories from a slice
+// If the slice is empty, sets Categories to empty string
+func (r *Resource) SetCategories(categories []string) {
+	if len(categories) == 0 {
+		r.Categories = ""
+		return
 	}
-
-	fmt.Printf("Found %d resources\n", len(resources))
-	return resources, nil
+	r.Categories = strings.Join(categories, ",")
 }
 
-const PageSize = 20
-
-type Pagination struct {
-	CurrentPage int         `json:"current_page"`
-	TotalPages  int         `json:"total_pages"`
-	TotalItems  int64       `json:"total_items"`
-	PageSize    int         `json:"page_size"`
-	Items       []*Resource `json:"items"`
-}
-
+// SearchResources searches resources with pagination
+// params: search parameters (currently unused)
+// page: page number for pagination
 func SearchResources(params map[string]string, page int) (*Pagination, error) {
 	var resources []*Resource
 	o := orm.NewOrm()
 
-	query := o.QueryTable("resource")
+	// Log search start
+	fmt.Println("\n==================================================")
+	fmt.Println("                Resource Search                    ")
+	fmt.Println("==================================================")
+	fmt.Printf("Table Name: %s\n", (&Resource{}).TableName())
+	fmt.Printf("Page Number: %d\n", page)
 
-	// Apply filters based on provided parameters
-	for key, value := range params {
-		if value != "" {
-			switch key {
-			case "title":
-				query = query.Filter("title__icontains", value)
-			case "level":
-				query = query.Filter("level", value)
-			case "description":
-				query = query.Filter("description__icontains", value)
+	// Define the main query
+	query := `
+		SELECT id, parent_url, google_drive_download_link, name, 
+		       relative_path, created_at, django_relative_path, 
+		       parent_directory, categories
+		FROM web_crawler_resources
+		ORDER BY created_at DESC
+		LIMIT ? OFFSET ?
+	`
+
+	// Calculate pagination parameters
+	const PageSize = 20
+	offset := (page - 1) * PageSize
+
+	// Execute count query
+	fmt.Println("\n[1] Executing Count Query...")
+	var total int64
+	countQuery := "SELECT COUNT(*) FROM web_crawler_resources"
+	fmt.Printf("Query: %s\n", countQuery)
+
+	err := o.Raw(countQuery).QueryRow(&total)
+	if err != nil {
+		fmt.Printf("❌ Error counting resources: %v\n", err)
+		return nil, fmt.Errorf("error counting resources: %v", err)
+	}
+	fmt.Printf("✅ Total records found: %d\n", total)
+
+	// Execute main query
+	fmt.Printf("\n[2] Executing Main Query...\n")
+	fmt.Printf("PageSize: %d, Offset: %d\n", PageSize, offset)
+	fmt.Printf("Query: %s\n", query)
+
+	num, err := o.Raw(query, PageSize, offset).QueryRows(&resources)
+	if err != nil {
+		fmt.Printf("❌ Error fetching resources: %v\n", err)
+		return nil, fmt.Errorf("error fetching resources: %v", err)
+	}
+	fmt.Printf("✅ Retrieved %d records\n", num)
+
+	// Log sample of retrieved records
+	if num > 0 {
+		fmt.Println("\n[3] Sample of Retrieved Records:")
+		for i, resource := range resources {
+			if i < 3 { // Show first 3 records as sample
+				fmt.Printf("\nRecord %d:\n", i+1)
+				fmt.Printf("  ID: %s\n", resource.Id)
+				fmt.Printf("  Name: %s\n", resource.Name)
+				fmt.Printf("  Categories: %v\n", resource.Categories)
 			}
 		}
 	}
 
-	// Get total count for pagination
-	total, err := query.Count()
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate pagination values
+	// Calculate pagination information
 	totalPages := int((total + int64(PageSize) - 1) / int64(PageSize))
-	if page < 1 {
-		page = 1
-	}
-	if page > totalPages {
-		page = totalPages
-	}
-	offset := (page - 1) * PageSize
+	fmt.Printf("\n[4] Pagination Summary:\n")
+	fmt.Printf("  Total Pages: %d\n", totalPages)
+	fmt.Printf("  Current Page: %d\n", page)
+	fmt.Printf("  Items Per Page: %d\n", PageSize)
+	fmt.Printf("  Total Items: %d\n", total)
 
-	// Get paginated results
-	_, err = query.OrderBy("-created_at").Limit(PageSize, offset).All(&resources)
-	if err != nil {
-		return nil, err
-	}
+	fmt.Println("\n==================================================\n")
 
+	// Return pagination result
 	return &Pagination{
 		CurrentPage: page,
 		TotalPages:  totalPages,
@@ -104,4 +130,13 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 		PageSize:    PageSize,
 		Items:       resources,
 	}, nil
+}
+
+// Pagination represents a paginated result set
+type Pagination struct {
+	CurrentPage int         `json:"current_page"`
+	TotalPages  int         `json:"total_pages"`
+	TotalItems  int64       `json:"total_items"`
+	PageSize    int         `json:"page_size"`
+	Items       []*Resource `json:"items"`
 }

@@ -15,6 +15,14 @@ func init() {
 		return
 	}
 
+	// Register all models in one place
+	orm.RegisterModel(
+		new(Resource),
+		new(User),
+		new(Job),
+		new(Session),
+	)
+
 	// Register default database
 	connStr := "user=postgres password=0000 dbname=cbcexams sslmode=disable"
 	err = orm.RegisterDataBase("default", "postgres", connStr)
@@ -22,13 +30,6 @@ func init() {
 		fmt.Printf("Failed to register database: %v\n", err)
 		return
 	}
-
-	// Register models
-	orm.RegisterModel(
-		new(User),
-		new(Resource),
-		new(Job),
-	)
 
 	// Test database connection
 	o := orm.NewOrm()
@@ -39,11 +40,17 @@ func init() {
 		return
 	}
 	fmt.Println("Database connection successful!")
+}
 
-	// Create tables
-	err = orm.RunSyncdb("default", false, true)
+func TestDatabaseConnection() error {
+	o := orm.NewOrm()
+
+	var count int64
+	err := o.Raw("SELECT COUNT(*) FROM web_crawler_resources").QueryRow(&count)
 	if err != nil {
-		fmt.Printf("Failed to sync database: %v\n", err)
-		return
+		return fmt.Errorf("database test query failed: %v", err)
 	}
+
+	fmt.Printf("Database connection test: found %d resources\n", count)
+	return nil
 }

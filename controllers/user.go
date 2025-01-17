@@ -4,7 +4,9 @@ import (
 	"cbc-backend/models"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"github.com/beego/beego/v2/client/orm"
 	beego "github.com/beego/beego/v2/server/web"
 )
 
@@ -21,9 +23,17 @@ type UserController struct {
 // @router / [post]
 func (u *UserController) Post() {
 	var user models.User
-	json.Unmarshal(u.Ctx.Input.RequestBody, &user)
-	uid := models.AddUser(user)
-	u.Data["json"] = map[string]string{"uid": uid}
+	if err := json.Unmarshal(u.Ctx.Input.RequestBody, &user); err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+		u.ServeJSON()
+		return
+	}
+
+	if err := models.AddUser(&user); err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+	} else {
+		u.Data["json"] = map[string]string{"id": fmt.Sprintf("%d", user.Id)}
+	}
 	u.ServeJSON()
 }
 
@@ -32,8 +42,14 @@ func (u *UserController) Post() {
 // @Success 200 {object} models.User
 // @router / [get]
 func (u *UserController) GetAll() {
-	users := models.GetAllUsers()
-	u.Data["json"] = users
+	o := orm.NewOrm()
+	var users []*models.User
+	_, err := o.QueryTable("user").All(&users)
+	if err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+	} else {
+		u.Data["json"] = users
+	}
 	u.ServeJSON()
 }
 
@@ -65,15 +81,26 @@ func (u *UserController) Get() {
 // @router /:uid [put]
 func (u *UserController) Put() {
 	uid := u.GetString(":uid")
-	if uid != "" {
-		var user models.User
-		json.Unmarshal(u.Ctx.Input.RequestBody, &user)
-		uu, err := models.UpdateUser(uid, &user)
-		if err != nil {
-			u.Data["json"] = err.Error()
-		} else {
-			u.Data["json"] = uu
-		}
+	if uid == "" {
+		u.Data["json"] = map[string]string{"error": "missing user id"}
+		u.ServeJSON()
+		return
+	}
+
+	var user models.User
+	if err := json.Unmarshal(u.Ctx.Input.RequestBody, &user); err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+		u.ServeJSON()
+		return
+	}
+
+	// Update user
+	o := orm.NewOrm()
+	user.Id, _ = strconv.Atoi(uid)
+	if _, err := o.Update(&user); err != nil {
+		u.Data["json"] = map[string]string{"error": err.Error()}
+	} else {
+		u.Data["json"] = user
 	}
 	u.ServeJSON()
 }
