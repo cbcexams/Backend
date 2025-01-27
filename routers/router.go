@@ -23,6 +23,10 @@ func init() {
 			beego.NSRouter("/", &controllers.ResourceController{}, "get:Get"),
 			beego.NSRouter("/", &controllers.ResourceController{}, "post:Post"),
 		),
+		beego.NSNamespace("/user",
+			beego.NSRouter("/signup", &controllers.UserController{}, "post:Post"),
+			beego.NSRouter("/login", &controllers.UserController{}, "post:Login"),
+		),
 	)
 
 	// Add namespace to beego
@@ -32,11 +36,13 @@ func init() {
 	fmt.Println("\nRegistered Routes:")
 	fmt.Printf("GET  /v1/resources\n")
 	fmt.Printf("POST /v1/resources\n")
+	fmt.Printf("POST /v1/user/signup\n")
+	fmt.Printf("POST /v1/user/login\n")
 
 	// Add middleware
 	beego.InsertFilter("/*", beego.BeforeRouter, middleware.LoggerMiddleware)
 	beego.InsertFilter("/*", beego.BeforeRouter, middleware.JWTMiddleware)
 
 	fmt.Println("\nRouter initialization complete")
-	fmt.Println("==================================================\n")
+	fmt.Println("==================================================")
 }

@@ -2,239 +2,94 @@ package controllers
 
 import (
 	"cbc-backend/models"
-	"encoding/json"
+	"cbc-backend/utils"
 	"fmt"
-	"strconv"
 
-	"github.com/beego/beego/v2/client/orm"
 	beego "github.com/beego/beego/v2/server/web"
 )
 
-// Operations about Users
+// UserController handles user-related operations
 type UserController struct {
 	beego.Controller
 }
 
-// @Title CreateUser
-// @Description create users
-// @Param	body		body 	models.User	true		"body for user content"
-// @Success 200 {int} models.User.Id
-// @Failure 403 body is empty
-// @router / [post]
+// Post handles user registration
 func (u *UserController) Post() {
-	var user models.User
-	if err := json.Unmarshal(u.Ctx.Input.RequestBody, &user); err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-		u.ServeJSON()
+	fmt.Println("\n==================================================")
+	fmt.Println("              User Registration                    ")
+	fmt.Println("==================================================")
+
+	// Get registration data
+	username := u.GetString("username")
+	password := u.GetString("password")
+	email := u.GetString("email")
+
+	fmt.Printf("Registering user: %s, Email: %s\n", username, email)
+
+	// Create new user
+	user := &models.User{
+		Username: username,
+		Password: password,
+		Email:    email,
+		Role:     "user", // Default role
+	}
+
+	// Add user to database
+	if err := models.AddUser(user); err != nil {
+		fmt.Printf("Error adding user: %v\n", err)
+		utils.SendResponse(&u.Controller, false, "", nil, err)
 		return
 	}
 
-	if err := models.AddUser(&user); err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-	} else {
-		u.Data["json"] = map[string]string{"id": fmt.Sprintf("%d", user.Id)}
-	}
-	u.ServeJSON()
-}
-
-// @Title GetAll
-// @Description get all Users
-// @Success 200 {object} models.User
-// @router / [get]
-func (u *UserController) GetAll() {
-	o := orm.NewOrm()
-	var users []*models.User
-	_, err := o.QueryTable("user").All(&users)
+	// Generate JWT token
+	token, err := user.GenerateToken()
 	if err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-	} else {
-		u.Data["json"] = users
-	}
-	u.ServeJSON()
-}
-
-// @Title Get
-// @Description get user by uid
-// @Param	uid		path 	string	true		"The key for staticblock"
-// @Success 200 {object} models.User
-// @Failure 403 :uid is empty
-// @router /:uid [get]
-func (u *UserController) Get() {
-	uid := u.GetString(":uid")
-	if uid != "" {
-		user, err := models.GetUser(uid)
-		if err != nil {
-			u.Data["json"] = err.Error()
-		} else {
-			u.Data["json"] = user
-		}
-	}
-	u.ServeJSON()
-}
-
-// @Title Update
-// @Description update the user
-// @Param	uid		path 	string	true		"The uid you want to update"
-// @Param	body		body 	models.User	true		"body for user content"
-// @Success 200 {object} models.User
-// @Failure 403 :uid is not int
-// @router /:uid [put]
-func (u *UserController) Put() {
-	uid := u.GetString(":uid")
-	if uid == "" {
-		u.Data["json"] = map[string]string{"error": "missing user id"}
-		u.ServeJSON()
+		fmt.Printf("Error generating token: %v\n", err)
+		utils.SendResponse(&u.Controller, false, "", nil, err)
 		return
 	}
 
-	var user models.User
-	if err := json.Unmarshal(u.Ctx.Input.RequestBody, &user); err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-		u.ServeJSON()
-		return
-	}
-
-	// Update user
-	o := orm.NewOrm()
-	user.Id, _ = strconv.Atoi(uid)
-	if _, err := o.Update(&user); err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-	} else {
-		u.Data["json"] = user
-	}
-	u.ServeJSON()
+	utils.SendResponse(&u.Controller, true, "User registered successfully", map[string]string{
+		"token": token,
+	}, nil)
 }
 
-// @Title Delete
-// @Description delete the user
-// @Param	uid		path 	string	true		"The uid you want to delete"
-// @Success 200 {string} delete success!
-// @Failure 403 uid is empty
-// @router /:uid [delete]
-func (u *UserController) Delete() {
-	uid := u.GetString(":uid")
-	models.DeleteUser(uid)
-	u.Data["json"] = "delete success!"
-	u.ServeJSON()
-}
-
-// @Title Login
-// @Description user login
-// @Param	body	body	models.User	true	"Username and password"
-// @Success 200 {string} token
-// @Failure 403 user not exist
-// @router /login [post]
+// Login handles user authentication
 func (u *UserController) Login() {
-	var loginInfo struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+	fmt.Println("\n==================================================")
+	fmt.Println("              User Login                          ")
+	fmt.Println("==================================================")
 
-	err := json.Unmarshal(u.Ctx.Input.RequestBody, &loginInfo)
+	// Get login credentials
+	username := u.GetString("username")
+	password := u.GetString("password")
+
+	fmt.Printf("Login attempt for user: %s\n", username)
+
+	// Get user from database
+	user, err := models.GetUser(username)
 	if err != nil {
-		u.Data["json"] = map[string]string{"error": "Invalid request body"}
-		u.ServeJSON()
+		fmt.Printf("Error finding user: %v\n", err)
+		utils.SendResponse(&u.Controller, false, "", nil, fmt.Errorf("invalid credentials"))
 		return
 	}
 
-	user, err := models.GetUser(loginInfo.Username)
-	if err != nil {
-		u.Data["json"] = map[string]string{"error": "User not found"}
-		u.ServeJSON()
+	// Validate password
+	if err := user.ValidatePassword(password); err != nil {
+		fmt.Printf("Invalid password for user %s: %v\n", username, err)
+		utils.SendResponse(&u.Controller, false, "", nil, fmt.Errorf("invalid credentials"))
 		return
 	}
 
-	if err := user.ValidatePassword(loginInfo.Password); err != nil {
-		u.Data["json"] = map[string]string{"error": "Invalid password"}
-		u.ServeJSON()
-		return
-	}
-
+	// Generate JWT token
 	token, err := user.GenerateToken()
 	if err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-		u.ServeJSON()
+		fmt.Printf("Error generating token: %v\n", err)
+		utils.SendResponse(&u.Controller, false, "", nil, err)
 		return
 	}
 
-	// Get session ID from request
-	sessionID := u.Ctx.Input.Cookie("session_id")
-	if sessionID == "" {
-		sessionID = u.Ctx.Input.Header("X-Session-ID")
-	}
-
-	// Link session to user if session exists
-	if sessionID != "" {
-		err = models.LinkSessionToUser(sessionID, user.Id)
-		if err != nil {
-			// Log error but don't fail the request
-			fmt.Printf("Failed to link session to user: %v\n", err)
-		}
-	}
-
-	u.Data["json"] = map[string]interface{}{
-		"token":      token,
-		"session_id": sessionID,
-	}
-	u.ServeJSON()
-}
-
-// @Title logout
-// @Description Logs out current logged in user session
-// @Success 200 {string} logout success
-// @router /logout [get]
-func (u *UserController) Logout() {
-	u.Data["json"] = "logout success"
-	u.ServeJSON()
-}
-
-// @Title Signup
-// @Description create new user
-// @Param	body	body	models.User	true	"User info"
-// @Success 200 {string} token
-// @Failure 403 body is empty
-// @router /signup [post]
-func (u *UserController) Signup() {
-	var user models.User
-	err := json.Unmarshal(u.Ctx.Input.RequestBody, &user)
-	if err != nil {
-		u.Data["json"] = map[string]string{"error": "Invalid request body"}
-		u.ServeJSON()
-		return
-	}
-
-	err = models.AddUser(&user)
-	if err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-		u.ServeJSON()
-		return
-	}
-
-	token, err := user.GenerateToken()
-	if err != nil {
-		u.Data["json"] = map[string]string{"error": err.Error()}
-		u.ServeJSON()
-		return
-	}
-
-	// Get session ID from request
-	sessionID := u.Ctx.Input.Cookie("session_id")
-	if sessionID == "" {
-		sessionID = u.Ctx.Input.Header("X-Session-ID")
-	}
-
-	// Link session to user if session exists
-	if sessionID != "" {
-		err = models.LinkSessionToUser(sessionID, user.Id)
-		if err != nil {
-			// Log error but don't fail the request
-			fmt.Printf("Failed to link session to user: %v\n", err)
-		}
-	}
-
-	u.Data["json"] = map[string]interface{}{
-		"token":      token,
-		"session_id": sessionID,
-	}
-	u.ServeJSON()
+	utils.SendResponse(&u.Controller, true, "Login successful", map[string]string{
+		"token": token,
+	}, nil)
 }
