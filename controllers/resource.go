@@ -20,27 +20,25 @@ type ResourceController struct {
 
 // Get retrieves a list of resources with pagination
 func (r *ResourceController) Get() {
-	// Log request details
-	fmt.Println("\n==================================================")
-	fmt.Println("              Resource Controller GET               ")
-	fmt.Println("==================================================")
-	fmt.Printf("Request URL: %s\n", r.Ctx.Request.URL.String())
-	fmt.Printf("Request Method: %s\n", r.Ctx.Request.Method)
-
-	// Get page parameter, default to 1 if not provided
+	// Get all query parameters
 	page, _ := r.GetInt("page", 1)
-	fmt.Printf("Page parameter: %d\n", page)
+
+	// Create params map with all search parameters
+	params := map[string]string{
+		"name":       r.GetString("name"),
+		"categories": r.GetString("categories"),
+	}
+
+	// Log the received parameters for debugging
+	fmt.Printf("Received search parameters: %+v\n", params)
 
 	// Fetch resources with pagination
-	pagination, err := models.SearchResources(nil, page)
+	pagination, err := models.SearchResources(params, page)
 	if err != nil {
-		fmt.Printf("❌ Error in SearchResources: %v\n", err)
 		utils.SendResponse(&r.Controller, false, "", nil, err)
 		return
 	}
 
-	// Send successful response
-	fmt.Printf("✅ SearchResources successful, found %d items\n", len(pagination.Items))
 	utils.SendResponse(&r.Controller, true, "", pagination, nil)
 }
 

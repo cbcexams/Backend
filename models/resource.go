@@ -47,8 +47,6 @@ func (r *Resource) SetCategories(categories []string) {
 }
 
 // SearchResources searches resources with pagination
-// params: search parameters (currently unused)
-// page: page number for pagination
 func SearchResources(params map[string]string, page int) (*Pagination, error) {
 	var resources []*Resource
 	o := orm.NewOrm()
@@ -57,30 +55,69 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 	fmt.Println("\n==================================================")
 	fmt.Println("                Resource Search                    ")
 	fmt.Println("==================================================")
-	fmt.Printf("Table Name: %s\n", (&Resource{}).TableName())
+	fmt.Printf("Search Parameters: %+v\n", params)
 	fmt.Printf("Page Number: %d\n", page)
 
-	// Define the main query
-	query := `
+	// Build the base query with search conditions
+	baseQuery := `
 		SELECT id, parent_url, google_drive_download_link, name, 
-		       relative_path, created_at, django_relative_path, 
-		       parent_directory, categories
+			   relative_path, created_at, django_relative_path, 
+			   parent_directory, categories
 		FROM web_crawler_resources
-		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?
+		WHERE 1=1
 	`
+	var conditions []string
+	var queryParams []interface{}
+
+	// Add name search if provided
+	if name, ok := params["name"]; ok && name != "" {
+		// Make the search more precise by using word boundaries
+		conditions = append(conditions, "(name ILIKE ? OR name ILIKE ? OR name ILIKE ?)")
+		searchTerm := name
+		queryParams = append(queryParams,
+			searchTerm+"%",      // Starts with
+			"% "+searchTerm+"%", // Contains as whole word
+			"%"+searchTerm+"%",  // Contains anywhere
+		)
+	}
+
+	// Add categories search if provided
+	if categories, ok := params["categories"]; ok && categories != "" {
+		conditions = append(conditions, "categories::text ILIKE ?")
+		queryParams = append(queryParams, "%\""+categories+"\"%") // Look for exact category in JSON array
+	}
+
+	// Combine conditions
+	if len(conditions) > 0 {
+		baseQuery += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	// Add ordering
+	baseQuery += " ORDER BY created_at DESC"
+
+	// Add pagination
+	baseQuery += " LIMIT ? OFFSET ?"
 
 	// Calculate pagination parameters
 	const PageSize = 20
 	offset := (page - 1) * PageSize
+	queryParams = append(queryParams, PageSize, offset)
 
 	// Execute count query
 	fmt.Println("\n[1] Executing Count Query...")
 	var total int64
-	countQuery := "SELECT COUNT(*) FROM web_crawler_resources"
-	fmt.Printf("Query: %s\n", countQuery)
 
-	err := o.Raw(countQuery).QueryRow(&total)
+	// Build count query
+	countQuery := `
+		SELECT COUNT(*)
+		FROM web_crawler_resources
+		WHERE 1=1
+	`
+	if len(conditions) > 0 {
+		countQuery += " AND " + strings.Join(conditions, " AND ")
+	}
+
+	err := o.Raw(countQuery, queryParams[:len(queryParams)-2]...).QueryRow(&total)
 	if err != nil {
 		fmt.Printf("❌ Error counting resources: %v\n", err)
 		return nil, fmt.Errorf("error counting resources: %v", err)
@@ -89,38 +126,18 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 
 	// Execute main query
 	fmt.Printf("\n[2] Executing Main Query...\n")
-	fmt.Printf("PageSize: %d, Offset: %d\n", PageSize, offset)
-	fmt.Printf("Query: %s\n", query)
+	fmt.Printf("Query: %s\n", baseQuery)
+	fmt.Printf("Parameters: %+v\n", queryParams)
 
-	num, err := o.Raw(query, PageSize, offset).QueryRows(&resources)
+	num, err := o.Raw(baseQuery, queryParams...).QueryRows(&resources)
 	if err != nil {
 		fmt.Printf("❌ Error fetching resources: %v\n", err)
 		return nil, fmt.Errorf("error fetching resources: %v", err)
 	}
 	fmt.Printf("✅ Retrieved %d records\n", num)
 
-	// Log sample of retrieved records
-	if num > 0 {
-		fmt.Println("\n[3] Sample of Retrieved Records:")
-		for i, resource := range resources {
-			if i < 3 { // Show first 3 records as sample
-				fmt.Printf("\nRecord %d:\n", i+1)
-				fmt.Printf("  ID: %s\n", resource.Id)
-				fmt.Printf("  Name: %s\n", resource.Name)
-				fmt.Printf("  Categories: %v\n", resource.Categories)
-			}
-		}
-	}
-
 	// Calculate pagination information
 	totalPages := int((total + int64(PageSize) - 1) / int64(PageSize))
-	fmt.Printf("\n[4] Pagination Summary:\n")
-	fmt.Printf("  Total Pages: %d\n", totalPages)
-	fmt.Printf("  Current Page: %d\n", page)
-	fmt.Printf("  Items Per Page: %d\n", PageSize)
-	fmt.Printf("  Total Items: %d\n", total)
-
-	fmt.Println("\n==================================================\n")
 
 	// Return pagination result
 	return &Pagination{
