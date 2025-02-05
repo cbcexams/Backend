@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"cbc-backend/config"
 	"cbc-backend/models"
 
 	"github.com/beego/beego/v2/client/orm"
@@ -15,6 +16,12 @@ import (
 
 // init initializes the application by setting up required directories
 func init() {
+	// Load configuration
+	if err := config.LoadConfig(); err != nil {
+		logs.Error("Failed to load configuration:", err)
+		os.Exit(1)
+	}
+
 	// Create uploads directory if it doesn't exist
 	// This directory is used to store uploaded resource files
 	if err := os.MkdirAll("uploads", 0755); err != nil {

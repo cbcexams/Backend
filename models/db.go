@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 
+	"cbc-backend/config"
+
 	"github.com/beego/beego/v2/client/orm"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
@@ -14,7 +16,7 @@ var (
 	initErr  error
 )
 
-// InitDB initializes the database connection and registers models
+// InitDB initializes the database connection and creates tables
 func InitDB() error {
 	initOnce.Do(func() {
 		// Register database driver
@@ -27,7 +29,14 @@ func InitDB() error {
 		}
 
 		// Try to register database
-		connStr := "user=postgres password=0000 dbname=cbcexams sslmode=disable"
+		connStr := fmt.Sprintf(
+			"user=%s password=%s dbname=%s host=%s port=%s sslmode=disable",
+			config.DBUser,
+			config.DBPassword,
+			config.DBName,
+			config.DBHost,
+			config.DBPort,
+		)
 		err := orm.RegisterDataBase("default", "postgres", connStr)
 		if err != nil {
 			// Ignore if already registered
@@ -37,17 +46,14 @@ func InitDB() error {
 			}
 		}
 
-		// Register all models in one place
-		orm.RegisterModel(
-			new(Resource),
-			// new(User),
-			// new(Job),
-			// new(Session),
-		)
+		// Ensure tables exist
+		if err := EnsureUsersTable(); err != nil {
+			initErr = fmt.Errorf("failed to create users table: %v", err)
+			return
+		}
 
-		// Test database connection
-		if err := TestDatabaseConnection(); err != nil {
-			initErr = fmt.Errorf("database connection test failed: %v", err)
+		if err := EnsureUploadsTable(); err != nil {
+			initErr = fmt.Errorf("failed to create uploads table: %v", err)
 			return
 		}
 
@@ -59,13 +65,12 @@ func InitDB() error {
 
 func TestDatabaseConnection() error {
 	o := orm.NewOrm()
-
 	var count int64
-	err := o.Raw("SELECT COUNT(*) FROM web_crawler_resources").QueryRow(&count)
+	err := o.Raw("SELECT COUNT(*) FROM uploads").QueryRow(&count)
 	if err != nil {
 		return fmt.Errorf("database test query failed: %v", err)
 	}
-
-	fmt.Printf("Database connection test: found %d resources\n", count)
+	fmt.Printf("✅ Database connected successfully\n")
+	fmt.Printf("✅ Found %d uploads in uploads table\n", count)
 	return nil
 }

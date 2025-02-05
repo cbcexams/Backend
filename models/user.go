@@ -9,13 +9,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// User represents a user in the system
 type User struct {
-	Id        int       `orm:"pk;auto" json:"id"`
-	Username  string    `orm:"size(128);unique" json:"username"`
+	ID        int       `orm:"pk;auto;column(id)" json:"id"`
+	Username  string    `orm:"unique;size(128)" json:"username"`
 	Password  string    `orm:"size(128)" json:"-"`
 	Email     string    `orm:"size(128);unique" json:"email"`
 	Role      string    `orm:"size(20)" json:"role"` // admin, teacher, student
 	CreatedAt time.Time `orm:"auto_now_add;type(timestamp)" json:"created_at"`
+}
+
+// TableName specifies the database table name
+func (u *User) TableName() string {
+	return "users"
 }
 
 func (u *User) HashPassword() error {
@@ -46,24 +52,19 @@ func (u *User) GenerateToken() (string, error) {
 	return tokenString, nil
 }
 
-func AddUser(user *User) error {
-	if err := user.HashPassword(); err != nil {
-		return err
-	}
+// GetUserByUsername retrieves a user by username
+func GetUserByUsername(username string) (*User, error) {
+	o := orm.NewOrm()
+	user := &User{Username: username}
+	err := o.Read(user, "Username")
+	return user, err
+}
 
+// CreateUser creates a new user
+func CreateUser(user *User) error {
 	o := orm.NewOrm()
 	_, err := o.Insert(user)
 	return err
-}
-
-func GetUser(username string) (*User, error) {
-	o := orm.NewOrm()
-	user := User{Username: username}
-	err := o.Read(&user, "Username")
-	if err != nil {
-		return nil, err
-	}
-	return &user, nil
 }
 
 func UpdateUser(user *User) error {
@@ -86,4 +87,21 @@ func ValidateToken(tokenString string) (*jwt.Token, error) {
 		return []byte("your-secret-key"), nil
 	})
 	return token, err
+}
+
+func EnsureUsersTable() error {
+	// Create table if it doesn't exist
+	sql := `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		username VARCHAR(128) UNIQUE NOT NULL,
+		password VARCHAR(128) NOT NULL,
+		email VARCHAR(128) UNIQUE,
+		role VARCHAR(20) DEFAULT 'user',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	)`
+
+	o := orm.NewOrm()
+	_, err := o.Raw(sql).Exec()
+	return err
 }

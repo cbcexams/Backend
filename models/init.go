@@ -1,3 +1,14 @@
 package models
 
-// No init function needed anymore - remove it entirely
+import (
+	"github.com/beego/beego/v2/client/orm"
+)
+
+func init() {
+	// Register models
+	orm.RegisterModel(
+		new(User),
+		new(Upload),
+		new(Resource), // For reading only
+	)
+}

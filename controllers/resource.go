@@ -4,7 +4,6 @@ import (
 	"cbc-backend/models"
 	"cbc-backend/utils"
 	"fmt"
-	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -20,193 +19,169 @@ type ResourceController struct {
 	beego.Controller
 }
 
+// Helper methods for error responses
+func (c *ResourceController) ServerError(msg string, err error) {
+	utils.SendResponse(&c.Controller, false, msg, nil, err)
+}
+
+func (c *ResourceController) BadRequest(msg string, err error) {
+	utils.SendResponse(&c.Controller, false, msg, nil, err)
+}
+
+// GetUserID gets the user ID from JWT token
+func (c *ResourceController) GetUserID() int {
+	authHeader := c.Ctx.Input.Header("Authorization")
+	if authHeader == "" {
+		return 0 // Or handle error as needed
+	}
+
+	// Remove "Bearer " prefix
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Get user ID from token
+	userID, err := utils.GetUserIDFromToken(tokenString)
+	if err != nil {
+		return 0 // Or handle error as needed
+	}
+
+	return userID
+}
+
 // Get retrieves a list of resources with pagination
 func (r *ResourceController) Get() {
 	// Get all query parameters
 	page, _ := r.GetInt("page", 1)
+	pageSize := 20 // Fixed page size
 
 	// Create params map with all search parameters
 	params := map[string]string{
-		"name":       r.GetString("name"),
-		"categories": r.GetString("categories"),
+		"name": r.GetString("name"),
 	}
 
 	// Log the received parameters for debugging
 	fmt.Printf("Received search parameters: %+v\n", params)
 
 	// Fetch resources with pagination
-	pagination, err := models.SearchResources(params, page)
+	o := orm.NewOrm()
+	var resources []*models.Resource
+
+	// Calculate offset
+	offset := (page - 1) * pageSize
+
+	// Build query
+	qs := o.QueryTable("web_crawler_resources")
+	if name, ok := params["name"]; ok && name != "" {
+		qs = qs.Filter("name__icontains", name)
+	}
+
+	// Get total count
+	totalItems, err := qs.Count()
 	if err != nil {
-		utils.SendResponse(&r.Controller, false, "", nil, err)
+		utils.SendResponse(&r.Controller, false, "Failed to get total count", nil, err)
 		return
+	}
+
+	// Calculate total pages
+	totalPages := (totalItems + int64(pageSize) - 1) / int64(pageSize)
+
+	// Get paginated results
+	_, err = qs.OrderBy("-created_at").Limit(pageSize).Offset(offset).All(&resources)
+	if err != nil {
+		utils.SendResponse(&r.Controller, false, "Failed to fetch resources", nil, err)
+		return
+	}
+
+	// Create pagination response with fields in the desired order
+	pagination := map[string]interface{}{
+		"current_page": page,
+		"total_pages":  totalPages,
+		"page_size":    pageSize,
+		"total_items":  totalItems,
+		"items":        resources, // items last
 	}
 
 	utils.SendResponse(&r.Controller, true, "", pagination, nil)
 }
 
-// Post handles resource creation/upload
-func (r *ResourceController) Post() {
-	fmt.Println("\n==================================================")
-	fmt.Println("              Resource Upload Started               ")
-	fmt.Println("==================================================")
-
-	// Log all form data received
-	fmt.Println("\n[1] Received Form Data:")
-	fmt.Printf("Name: %s\n", r.GetString("name"))
-	fmt.Printf("Parent Directory: %s\n", r.GetString("parent_directory"))
-	fmt.Printf("Categories: %s\n", r.GetString("categories"))
-
-	// Get form parameters with validation
-	name := r.GetString("name")
-	if name == "" {
-		fmt.Println("❌ Error: name is required")
-		utils.SendResponse(&r.Controller, false, "", nil, fmt.Errorf("name is required"))
+// Post handles file upload
+func (c *ResourceController) Post() {
+	// Ensure uploads table exists
+	if err := models.EnsureUploadsTable(); err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to ensure uploads table exists", nil, err)
 		return
 	}
 
-	parentDir := r.GetString("parent_directory")
-	categoriesStr := r.GetString("categories")
-	fmt.Printf("Raw categories string: %s\n", categoriesStr)
-
-	// Clean up the categories string
-	categoriesStr = strings.Trim(categoriesStr, "{}")
-	var categories []string
-	if categoriesStr != "" {
-		categories = strings.Split(categoriesStr, ",")
-		// Trim spaces from each category
-		for i := range categories {
-			categories[i] = strings.TrimSpace(categories[i])
-		}
-	}
-
-	fmt.Println("\n[2] Parsed Parameters:")
-	fmt.Printf("Name: %s\n", name)
-	fmt.Printf("Parent Directory: %s\n", parentDir)
-	fmt.Printf("Categories: %v\n", categories)
-
-	// Check if file was sent
-	fmt.Println("\n[3] Processing File Upload:")
-	f, h, err := r.GetFile("file")
+	// Get the uploaded file
+	file, header, err := c.GetFile("file")
 	if err != nil {
-		if err == http.ErrMissingFile {
-			fmt.Println("❌ Error: No file was uploaded")
-			utils.SendResponse(&r.Controller, false, "", nil, fmt.Errorf("file is required"))
-			return
-		}
-		fmt.Printf("❌ Error getting file: %v\n", err)
-		utils.SendResponse(&r.Controller, false, "", nil, err)
+		utils.SendResponse(&c.Controller, false, "No file uploaded", nil, err)
 		return
 	}
-	defer f.Close()
-
-	fmt.Printf("File received: %s\n", h.Filename)
-	fmt.Printf("File size: %d bytes\n", h.Size)
-	fmt.Printf("File header: %+v\n", h.Header)
+	defer file.Close()
 
 	// Validate file type
-	fmt.Println("\n[4] Validating File Type:")
-	if err := validateFileType(h.Filename); err != nil {
-		fmt.Printf("❌ Invalid file type: %v\n", err)
-		utils.SendResponse(&r.Controller, false, "", nil, err)
+	if err := validateFileType(header.Filename); err != nil {
+		utils.SendResponse(&c.Controller, false, "Invalid file type", nil, err)
 		return
 	}
-	fmt.Println("✅ File type validation passed")
 
-	// Generate file paths
-	fmt.Println("\n[5] Generating File Paths:")
-	ext := path.Ext(h.Filename)
-	timestamp := time.Now().Format("20060102150405")
-	relativePath := fmt.Sprintf("uploads/%s%s", timestamp, ext)
-	djangoPath := fmt.Sprintf("/media/resources/%s%s", timestamp, ext)
+	// Generate unique ID for the upload
+	uploadId := uuid.New().String()
 
-	fmt.Printf("File extension: %s\n", ext)
-	fmt.Printf("Timestamp: %s\n", timestamp)
-	fmt.Printf("Relative path: %s\n", relativePath)
-	fmt.Printf("Django path: %s\n", djangoPath)
-
-	// Get user ID from JWT context
-	fmt.Println("\n[6] Getting User ID from JWT:")
-	userIDRaw := r.Ctx.Input.GetData("user_id")
-	fmt.Printf("Raw user ID from JWT: %v (type: %T)\n", userIDRaw, userIDRaw)
-	userID := userIDRaw.(float64)
-	fmt.Printf("Converted user ID: %d\n", int(userID))
-
-	// Create resource
-	fmt.Println("\n[7] Creating Resource Object:")
-	resource := models.Resource{
-		Id:                 uuid.New().String(),
-		UserID:             int(userID),
-		Name:               name,
-		ParentDirectory:    parentDir,
-		CreatedAt:          time.Now(),
-		RelativePath:       relativePath,
-		DjangoRelativePath: djangoPath,
-	}
-
-	// Parse categories
-	categoriesStr = r.GetString("categories")
-	fmt.Printf("Raw categories string: %s\n", categoriesStr)
-
-	// Clean up the categories string and set it
-	categoriesStr = strings.Trim(categoriesStr, "{}")
-	if categoriesStr != "" {
-		categories := strings.Split(categoriesStr, ",")
-		// Trim spaces from each category
-		for i := range categories {
-			categories[i] = strings.TrimSpace(categories[i])
-		}
-		resource.SetCategories(categories)
-	}
-
-	fmt.Printf("Resource object created: %+v\n", resource)
-
-	// Save uploaded file
-	fmt.Println("\n[8] Saving File to Disk:")
-	fmt.Printf("Saving to path: %s\n", relativePath)
-	if err := r.SaveToFile("file", relativePath); err != nil {
-		fmt.Printf("❌ Error saving file: %v\n", err)
-		utils.SendResponse(&r.Controller, false, "", nil, err)
+	// Create upload directory if it doesn't exist
+	uploadDir := "uploads/" + time.Now().Format("2006/01/02")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to create upload directory", nil, err)
 		return
 	}
-	fmt.Println("✅ File saved successfully")
+
+	// Generate unique filename
+	ext := path.Ext(header.Filename)
+	fileName := fmt.Sprintf("%s%s", uploadId, ext)
+	filePath := path.Join(uploadDir, fileName)
+
+	// Save the file
+	if err := c.SaveToFile("file", filePath); err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to save file", nil, err)
+		return
+	}
+
+	// Get file info
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to get file info", nil, err)
+		return
+	}
+
+	// Create upload record
+	upload := &models.Upload{
+		Id:          uploadId,
+		FileName:    header.Filename,
+		FilePath:    filePath,
+		FileSize:    fileInfo.Size(),
+		ContentType: header.Header.Get("Content-Type"),
+		UserID:      c.GetUserID(),
+	}
 
 	// Save to database
-	fmt.Println("\n[9] Saving to Database:")
-	o := orm.NewOrm()
-	fmt.Println("Creating database transaction...")
-
-	// Debug: Print the SQL that will be executed
-	sql := `
-		INSERT INTO web_crawler_resources 
-		(id, user_id, name, parent_directory, relative_path, django_relative_path, categories, google_drive_download_link) 
-		VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
-	`
-	fmt.Printf("SQL to be executed: %s\n", sql)
-	fmt.Printf("Values: id=%s, user_id=%d, name=%s, parent_dir=%s, rel_path=%s, django_path=%s, categories=%v\n",
-		resource.Id, resource.UserID, resource.Name, resource.ParentDirectory,
-		resource.RelativePath, resource.DjangoRelativePath, resource.Categories)
-
-	_, err = o.Raw(sql, resource.Id, resource.UserID, resource.Name, resource.ParentDirectory,
-		resource.RelativePath, resource.DjangoRelativePath, resource.Categories).Exec()
-	if err != nil {
-		fmt.Printf("❌ Database error: %v\n", err)
-		// If file was saved but database insert failed, try to clean up the file
-		fmt.Printf("Attempting to clean up saved file: %s\n", relativePath)
-		if err := os.Remove(relativePath); err != nil {
-			fmt.Printf("⚠️ Warning: Could not clean up file: %v\n", err)
-		} else {
-			fmt.Println("✅ File cleanup successful")
-		}
-		utils.SendResponse(&r.Controller, false, "", nil, err)
+	if err := models.CreateUpload(upload); err != nil {
+		// Clean up the file if database insert fails
+		os.Remove(filePath)
+		utils.SendResponse(&c.Controller, false, "Failed to create upload record", nil, err)
 		return
 	}
-	fmt.Println("✅ Resource saved to database successfully")
 
-	fmt.Println("\n[10] Upload Complete!")
-	fmt.Printf("Resource ID: %s\n", resource.Id)
-	fmt.Println("==================================================")
-
-	utils.SendResponse(&r.Controller, true, "Resource created successfully", resource, nil)
+	c.Data["json"] = map[string]interface{}{
+		"success": true,
+		"message": "File uploaded successfully",
+		"data": map[string]interface{}{
+			"upload_id": uploadId,
+			"file_name": header.Filename,
+			"file_path": filePath,
+			"file_size": fileInfo.Size(),
+		},
+	}
+	c.ServeJSON()
 }
 
 // validateFileType checks if the file extension is allowed

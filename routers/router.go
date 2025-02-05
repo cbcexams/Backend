@@ -18,20 +18,12 @@ func init() {
 	fmt.Println("              Router Initialization                ")
 	fmt.Println("==================================================")
 
-	// Create a namespace for v1 API
-	ns := beego.NewNamespace("/v1",
-		beego.NSNamespace("/resources",
-			beego.NSRouter("/", &controllers.ResourceController{}, "get:Get"),
-			beego.NSRouter("/", &controllers.ResourceController{}, "post:Post"),
-		),
-		beego.NSNamespace("/user",
-			beego.NSRouter("/signup", &controllers.UserController{}, "post:Post"),
-			beego.NSRouter("/login", &controllers.UserController{}, "post:Login"),
-		),
-	)
+	// User routes
+	beego.Router("/v1/user/signup", &controllers.UserController{}, "post:Post")
+	beego.Router("/v1/user/login", &controllers.UserController{}, "post:Login")
 
-	// Add namespace to beego
-	beego.AddNamespace(ns)
+	// Resource routes
+	beego.Router("/v1/resources", &controllers.ResourceController{})
 
 	// Add JWT middleware only for POST /v1/resources
 	beego.InsertFilter("/v1/resources", beego.BeforeRouter, func(ctx *context.Context) {

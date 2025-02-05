@@ -1,149 +1,39 @@
 package models
 
 import (
-	"fmt"
 	"strings"
 	"time"
-
-	"github.com/beego/beego/v2/client/orm"
 )
 
-// Resource represents a teaching resource in the system
-// It maps to the web_crawler_resources table in the database
+// Resource represents an existing resource in the system
 type Resource struct {
 	Id                      string    `orm:"pk;column(id);type(uuid)" json:"id"`
-	UserID                  int       `orm:"column(user_id)" json:"user_id"`
-	ParentUrl               string    `orm:"column(parent_url);type(text);null" json:"parent_url"`
-	GoogleDriveDownloadLink *string   `orm:"column(google_drive_download_link);type(text);null" json:"google_drive_download_link,omitempty"`
+	ParentUrl               string    `orm:"column(parent_url);type(text)" json:"parent_url"`
+	GoogleDriveDownloadLink string    `orm:"column(google_drive_download_link);type(text)" json:"google_drive_download_link"`
 	Name                    string    `orm:"column(name);type(text)" json:"name"`
-	RelativePath            string    `orm:"column(relative_path);type(text);unique" json:"relative_path"`
+	RelativePath            string    `orm:"column(relative_path);type(text)" json:"relative_path"`
 	CreatedAt               time.Time `orm:"column(created_at);type(timestamp with time zone);auto_now_add" json:"created_at"`
-	DjangoRelativePath      string    `orm:"column(django_relative_path);type(text);unique;null" json:"django_relative_path"`
-	ParentDirectory         string    `orm:"column(parent_directory);type(text);null" json:"parent_directory"`
-	Categories              string    `orm:"column(categories);type(text);null" json:"categories"`
+	DjangoRelativePath      string    `orm:"column(django_relative_path);type(text)" json:"django_relative_path"`
+	ParentDirectory         string    `orm:"column(parent_directory);type(text)" json:"parent_directory"`
+	Categories              string    `orm:"column(categories);type(varchar)" json:"categories"`
 }
 
-// TableName specifies the database table name for the Resource model
+// TableName specifies the database table name
 func (r *Resource) TableName() string {
 	return "web_crawler_resources"
 }
 
-// GetCategories returns the categories as a slice
+// GetCategories returns the categories as a string slice
 func (r *Resource) GetCategories() []string {
-	if r.Categories == "" {
-		return nil
+	// Remove the curly braces and split by comma
+	categoriesStr := r.Categories[1 : len(r.Categories)-1] // Remove { and }
+	if categoriesStr == "" {
+		return []string{}
 	}
-	// Remove braces and split by comma
-	categories := strings.Trim(r.Categories, "{}")
-	return strings.Split(categories, ",")
+	return strings.Split(categoriesStr, ",")
 }
 
-// SetCategories sets the categories
+// SetCategories sets the categories from a string slice
 func (r *Resource) SetCategories(categories []string) {
-	if len(categories) == 0 {
-		r.Categories = ""
-		return
-	}
-	// Store as comma-separated string
-	r.Categories = strings.Join(categories, ",")
-}
-
-// SearchResources searches resources with pagination
-func SearchResources(params map[string]string, page int) (*Pagination, error) {
-	var resources []*Resource
-	o := orm.NewOrm()
-
-	// Log basic search info
-	fmt.Printf("\n🔍 Searching resources - Page: %d, Filters: %v\n", page, params)
-
-	// Build the base query with search conditions
-	baseQuery := `
-		SELECT id, parent_url, google_drive_download_link, name, 
-			   relative_path, created_at, django_relative_path, 
-			   parent_directory, categories
-		FROM web_crawler_resources
-		WHERE 1=1
-	`
-	var conditions []string
-	var queryParams []interface{}
-
-	// Add name search if provided
-	if name, ok := params["name"]; ok && name != "" {
-		conditions = append(conditions, "(name ILIKE ? OR name ILIKE ? OR name ILIKE ?)")
-		searchTerm := name
-		queryParams = append(queryParams,
-			searchTerm+"%",      // Starts with
-			"% "+searchTerm+"%", // Contains as whole word
-			"%"+searchTerm+"%",  // Contains anywhere
-		)
-	}
-
-	// Add categories search if provided
-	if categories, ok := params["categories"]; ok && categories != "" {
-		// Simple ILIKE search on the text field
-		conditions = append(conditions, "categories ILIKE ?")
-		queryParams = append(queryParams, "%"+categories+"%")
-	}
-
-	// Combine conditions and add pagination
-	if len(conditions) > 0 {
-		baseQuery += " AND " + strings.Join(conditions, " AND ")
-	}
-	baseQuery += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-
-	// Calculate pagination parameters
-	const PageSize = 20
-	offset := (page - 1) * PageSize
-	queryParams = append(queryParams, PageSize, offset)
-
-	// Get total count
-	var total int64
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM web_crawler_resources WHERE 1=1 %s",
-		len(conditions) > 0 ? " AND "+strings.Join(conditions, " AND ") : "")
-	
-	if err := o.Raw(countQuery, queryParams[:len(queryParams)-2]...).QueryRow(&total); err != nil {
-		return nil, fmt.Errorf("error counting resources: %v", err)
-	}
-
-	// Execute main query
-	num, err := o.Raw(baseQuery, queryParams...).QueryRows(&resources)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching resources: %v", err)
-	}
-
-	// Log results summary
-	fmt.Printf("📊 Found %d total matches, returning %d items for page %d\n", total, num, page)
-
-	return &Pagination{
-		CurrentPage: page,
-		TotalPages:  int((total + int64(PageSize) - 1) / int64(PageSize)),
-		TotalItems:  total,
-		PageSize:    PageSize,
-		Items:       resources,
-	}, nil
-}
-
-// Pagination represents a paginated result set
-type Pagination struct {
-	CurrentPage int         `json:"current_page"`
-	TotalPages  int         `json:"total_pages"`
-	TotalItems  int64       `json:"total_items"`
-	PageSize    int         `json:"page_size"`
-	Items       []*Resource `json:"items"`
-}
-
-// Add this to the Resource struct methods
-func (r *Resource) String() string {
-	return fmt.Sprintf(
-		"Resource{ID: %s, Name: %s, UserID: %d, RelativePath: %s, Categories: %v}",
-		r.Id, r.Name, r.UserID, r.RelativePath, r.Categories,
-	)
-}
-
-// BeforeInsert is called before inserting a new resource
-func (r *Resource) BeforeInsert() {
-	// For manually uploaded files, set GoogleDriveDownloadLink to NULL
-	if !strings.HasPrefix(r.ParentUrl, "https://") {
-		r.GoogleDriveDownloadLink = nil
-	}
+	r.Categories = "{" + strings.Join(categories, ",") + "}"
 }
