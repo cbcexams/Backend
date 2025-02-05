@@ -17,24 +17,40 @@ type JobController struct {
 
 // Get retrieves a list of jobs
 func (c *JobController) Get() {
-	page, _ := c.GetInt("page", 1)
-	title := c.GetString("title")
-	jobType := c.GetString("type")
-	location := c.GetString("location")
+	fmt.Println("\n==================================================")
+	fmt.Println("              Jobs Search                          ")
+	fmt.Println("==================================================")
 
+	// Get all possible query parameters
+	page, _ := c.GetInt("page", 1)
 	params := map[string]string{
-		"title":    title,
-		"type":     jobType,
-		"location": location,
+		"title":    c.GetString("title"),
+		"type":     c.GetString("type"),
+		"location": c.GetString("location"),
+	}
+
+	// Log search parameters
+	fmt.Printf("Search Parameters:\n")
+	for k, v := range params {
+		if v != "" {
+			fmt.Printf("- %s: %s\n", k, v)
+		}
+	}
+	fmt.Printf("- page: %d\n", page)
+
+	// Ensure jobs table exists
+	if err := models.EnsureJobsTable(); err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to ensure jobs table exists", nil, err)
+		return
 	}
 
 	pagination, err := models.SearchJobs(params, page)
 	if err != nil {
-		utils.SendResponse(&c.Controller, false, "", nil, err)
+		utils.SendResponse(&c.Controller, false, "Failed to search jobs", nil, err)
 		return
 	}
 
-	utils.SendResponse(&c.Controller, true, "", pagination, nil)
+	utils.SendResponse(&c.Controller, true, "Jobs retrieved successfully", pagination, nil)
 }
 
 // GetOne retrieves a single job by ID
@@ -57,18 +73,25 @@ func (c *JobController) GetOne() {
 
 // Post creates a new job
 func (c *JobController) Post() {
+	// Ensure jobs table exists
+	if err := models.EnsureJobsTable(); err != nil {
+		utils.SendResponse(&c.Controller, false, "Failed to ensure jobs table exists", nil, err)
+		return
+	}
+
 	var job models.Job
 	if err := json.Unmarshal(c.Ctx.Input.RequestBody, &job); err != nil {
-		utils.SendResponse(&c.Controller, false, "", nil, err)
+		utils.SendResponse(&c.Controller, false, "Invalid request body", nil, err)
 		return
 	}
 
-	_, err := models.AddJob(job)
+	id, err := models.AddJob(job)
 	if err != nil {
-		utils.SendResponse(&c.Controller, false, "", nil, err)
+		utils.SendResponse(&c.Controller, false, "Failed to create job", nil, err)
 		return
 	}
 
+	job.Id = int(id)
 	utils.SendResponse(&c.Controller, true, "Job created successfully", job, nil)
 }
 

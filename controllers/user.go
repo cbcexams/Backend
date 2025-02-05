@@ -102,3 +102,16 @@ func (c *UserController) Login() {
 		"token": token,
 	}, nil)
 }
+
+// Logout handles user logout
+func (c *UserController) Logout() {
+	// Get the token from Authorization header
+	authHeader := c.Ctx.Input.Header("Authorization")
+	if authHeader == "" {
+		utils.SendResponse(&c.Controller, false, "No token provided", nil, nil)
+		return
+	}
+
+	// For now, we'll just return success since JWT tokens are stateless
+	utils.SendResponse(&c.Controller, true, "Logged out successfully", nil, nil)
+}

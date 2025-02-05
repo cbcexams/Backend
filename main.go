@@ -12,6 +12,7 @@ import (
 	"github.com/beego/beego/v2/core/logs"
 	beego "github.com/beego/beego/v2/server/web"
 	"github.com/beego/beego/v2/server/web/context"
+	"github.com/beego/beego/v2/server/web/filter/cors"
 )
 
 // init initializes the application by setting up required directories
@@ -36,16 +37,29 @@ func init() {
 }
 
 func main() {
-	// Print application startup banner
-	fmt.Println("\n==================================================")
-	fmt.Println("                 Application Start                  ")
-	fmt.Println("==================================================")
+	fmt.Println("\n=== CBC Backend Service Initialization ===")
+
+	// Initialize database connection
+	if err := models.InitDB(); err != nil {
+		logs.Error("Database initialization failed:", err)
+		os.Exit(1)
+	}
+	logs.Info("✓ Database connected successfully")
 
 	// Test database connection
 	if err := testDatabaseConnection(); err != nil {
-		fmt.Printf("❌ Database connection error: %v\n", err)
+		logs.Error("Database test failed:", err)
 		os.Exit(1)
 	}
+
+	// Configure CORS
+	beego.InsertFilter("*", beego.BeforeRouter, cors.Allow(&cors.Options{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+	}))
 
 	// Configure development mode settings
 	if beego.BConfig.RunMode == "dev" {
@@ -89,9 +103,10 @@ func main() {
 	fmt.Printf("RunMode: %s\n", beego.BConfig.RunMode)
 	fmt.Printf("HTTP Server: http://%s:%d\n", beego.BConfig.Listen.HTTPAddr, beego.BConfig.Listen.HTTPPort)
 	if beego.BConfig.Listen.EnableAdmin {
-		fmt.Printf("Admin Server: http://%s:%d\n", beego.BConfig.Listen.AdminAddr, beego.BConfig.Listen.AdminPort)
+		logs.Info("Admin Server: http://%s:%d", beego.BConfig.Listen.AdminAddr, beego.BConfig.Listen.AdminPort)
 	}
 
+	fmt.Println("=== Initialization Complete ===")
 	beego.Run()
 }
 

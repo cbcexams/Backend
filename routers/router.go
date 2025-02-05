@@ -1,6 +1,6 @@
 // @APIVersion 1.0.0
-// @Title Teaching App API
-// @Description Teaching resources and jobs API
+// @Title CBC-Backend API
+// @Description CBC-Backend API
 package routers
 
 import (
@@ -14,16 +14,34 @@ import (
 )
 
 func init() {
-	fmt.Println("\n==================================================")
-	fmt.Println("              Router Initialization                ")
-	fmt.Println("==================================================")
+	fmt.Println("\n=== Route Configuration ===")
 
+	// Configure routes
+	configureUserRoutes()
+	configureResourceRoutes()
+	configureJobRoutes()
+
+	// Print route summary
+	fmt.Println("\nAvailable Endpoints:")
+	fmt.Printf("Auth:\n")
+	fmt.Printf("  POST /v1/user/signup\n")
+	fmt.Printf("  POST /v1/user/login\n")
+	fmt.Printf("  GET  /v1/user/logout\n")
+	fmt.Printf("\nResources:\n")
+	fmt.Printf("  GET  /v1/resources? [params] [public]\n")
+	fmt.Printf("  POST /v1/resources [Protected]\n")
+	fmt.Printf("\nJobs:\n")
+	fmt.Printf("  GET  /v1/jobs?[params] [Protected]\n")
+	fmt.Printf("  POST /v1/jobs [Protected]\n")
+
+	fmt.Println("\n=== Route Configuration Complete ===")
+}
+
+func configureUserRoutes() {
 	// User routes
 	beego.Router("/v1/user/signup", &controllers.UserController{}, "post:Post")
 	beego.Router("/v1/user/login", &controllers.UserController{}, "post:Login")
-
-	// Resource routes
-	beego.Router("/v1/resources", &controllers.ResourceController{})
+	beego.Router("/v1/user/logout", &controllers.UserController{}, "get:Logout")
 
 	// Add JWT middleware only for POST /v1/resources
 	beego.InsertFilter("/v1/resources", beego.BeforeRouter, func(ctx *context.Context) {
@@ -36,16 +54,24 @@ func init() {
 		}
 	})
 
+	// Add JWT middleware for POST /v1/jobs
+	beego.InsertFilter("/v1/jobs", beego.BeforeRouter, func(ctx *context.Context) {
+		// Protect both GET and POST methods
+		if ctx.Input.Method() == "GET" || ctx.Input.Method() == "POST" {
+			middleware.JWTMiddleware(ctx)
+		}
+	})
+
 	// Add logger middleware for all routes
 	beego.InsertFilter("/*", beego.BeforeRouter, middleware.LoggerMiddleware)
+}
 
-	// Print registered routes
-	fmt.Println("\nRegistered Routes:")
-	fmt.Printf("GET  /v1/resources?[params] (public)\n")
-	fmt.Printf("POST /v1/resources (protected)\n")
-	fmt.Printf("POST /v1/user/signup\n")
-	fmt.Printf("POST /v1/user/login\n")
+func configureResourceRoutes() {
+	// Resource routes
+	beego.Router("/v1/resources", &controllers.ResourceController{})
+}
 
-	fmt.Println("\nRouter initialization complete")
-	fmt.Println("==================================================")
+func configureJobRoutes() {
+	// Jobs routes
+	beego.Router("/v1/jobs", &controllers.JobController{})
 }

@@ -10,5 +10,6 @@ func init() {
 		new(User),
 		new(Upload),
 		new(Resource), // For reading only
+		new(Job),
 	)
 }

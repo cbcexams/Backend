@@ -28,6 +28,11 @@ type JobPagination struct {
 }
 
 func AddJob(job Job) (int64, error) {
+	// Ensure table exists first
+	if err := EnsureJobsTable(); err != nil {
+		return 0, fmt.Errorf("failed to ensure jobs table: %v", err)
+	}
+
 	o := orm.NewOrm()
 	id, err := o.Insert(&job)
 	if err != nil {
@@ -41,7 +46,7 @@ func SearchJobs(params map[string]string, page int) (*JobPagination, error) {
 	var jobs []*Job
 	o := orm.NewOrm()
 
-	query := o.QueryTable("job")
+	query := o.QueryTable("jobs")
 
 	// Apply filters
 	for key, value := range params {
@@ -105,5 +110,27 @@ func UpdateJob(job *Job) error {
 func DeleteJob(id int) error {
 	o := orm.NewOrm()
 	_, err := o.Delete(&Job{Id: id})
+	return err
+}
+
+// Add TableName method to specify the table name
+func (j *Job) TableName() string {
+	return "jobs"
+}
+
+func EnsureJobsTable() error {
+	sql := `
+	CREATE TABLE IF NOT EXISTS jobs (
+		id SERIAL PRIMARY KEY,
+		title VARCHAR(100) NOT NULL,
+		description TEXT,
+		location VARCHAR(100),
+		type VARCHAR(50),
+		salary VARCHAR(50),
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	)`
+
+	o := orm.NewOrm()
+	_, err := o.Raw(sql).Exec()
 	return err
 }
