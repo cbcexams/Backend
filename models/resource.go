@@ -33,7 +33,9 @@ func (r *Resource) GetCategories() []string {
 	if r.Categories == "" {
 		return nil
 	}
-	return strings.Split(r.Categories, ",")
+	// Remove braces and split by comma
+	categories := strings.Trim(r.Categories, "{}")
+	return strings.Split(categories, ",")
 }
 
 // SetCategories sets the categories
@@ -42,7 +44,8 @@ func (r *Resource) SetCategories(categories []string) {
 		r.Categories = ""
 		return
 	}
-	r.Categories = "{" + strings.Join(categories, ",") + "}"
+	// Store as comma-separated string
+	r.Categories = strings.Join(categories, ",")
 }
 
 // SearchResources searches resources with pagination
@@ -50,12 +53,8 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 	var resources []*Resource
 	o := orm.NewOrm()
 
-	// Log search start
-	fmt.Println("\n==================================================")
-	fmt.Println("                Resource Search                    ")
-	fmt.Println("==================================================")
-	fmt.Printf("Search Parameters: %+v\n", params)
-	fmt.Printf("Page Number: %d\n", page)
+	// Log basic search info
+	fmt.Printf("\n🔍 Searching resources - Page: %d, Filters: %v\n", page, params)
 
 	// Build the base query with search conditions
 	baseQuery := `
@@ -81,66 +80,39 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 
 	// Add categories search if provided
 	if categories, ok := params["categories"]; ok && categories != "" {
-		categories = strings.Trim(categories, "{}")
-		if categories != "" {
-			// Use string_to_array to convert the text field to an array for searching
-			conditions = append(conditions, "? = ANY(string_to_array(trim(both '{}' from categories), ','))")
-			queryParams = append(queryParams, categories)
-		}
+		// Simple ILIKE search on the text field
+		conditions = append(conditions, "categories ILIKE ?")
+		queryParams = append(queryParams, "%"+categories+"%")
 	}
 
-	// Combine conditions
+	// Combine conditions and add pagination
 	if len(conditions) > 0 {
 		baseQuery += " AND " + strings.Join(conditions, " AND ")
 	}
-
-	// Add ordering
-	baseQuery += " ORDER BY created_at DESC"
-
-	// Add pagination
-	baseQuery += " LIMIT ? OFFSET ?"
+	baseQuery += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
 
 	// Calculate pagination parameters
 	const PageSize = 20
 	offset := (page - 1) * PageSize
 	queryParams = append(queryParams, PageSize, offset)
 
-	// Execute count query
-	fmt.Println("\n[1] Executing Count Query...")
+	// Get total count
 	var total int64
-
-	// Build count query
-	countQuery := `
-		SELECT COUNT(*)
-		FROM web_crawler_resources
-		WHERE 1=1
-	`
-	if len(conditions) > 0 {
-		countQuery += " AND " + strings.Join(conditions, " AND ")
-	}
-
-	// Debug the queries
-	fmt.Printf("Count Query: %s\n", countQuery)
-	fmt.Printf("Query Params: %+v\n", queryParams[:len(queryParams)-2])
-
-	err := o.Raw(countQuery, queryParams[:len(queryParams)-2]...).QueryRow(&total)
-	if err != nil {
-		fmt.Printf("❌ Error counting resources: %v\n", err)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM web_crawler_resources WHERE 1=1 %s",
+		len(conditions) > 0 ? " AND "+strings.Join(conditions, " AND ") : "")
+	
+	if err := o.Raw(countQuery, queryParams[:len(queryParams)-2]...).QueryRow(&total); err != nil {
 		return nil, fmt.Errorf("error counting resources: %v", err)
 	}
-	fmt.Printf("✅ Total records found: %d\n", total)
 
 	// Execute main query
-	fmt.Printf("\n[2] Executing Main Query...\n")
-	fmt.Printf("Query: %s\n", baseQuery)
-	fmt.Printf("Parameters: %+v\n", queryParams)
-
 	num, err := o.Raw(baseQuery, queryParams...).QueryRows(&resources)
 	if err != nil {
-		fmt.Printf("❌ Error fetching resources: %v\n", err)
 		return nil, fmt.Errorf("error fetching resources: %v", err)
 	}
-	fmt.Printf("✅ Retrieved %d records\n", num)
+
+	// Log results summary
+	fmt.Printf("📊 Found %d total matches, returning %d items for page %d\n", total, num, page)
 
 	return &Pagination{
 		CurrentPage: page,

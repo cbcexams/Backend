@@ -21,10 +21,10 @@ func init() {
 		logs.Error("Failed to create uploads directory:", err)
 	}
 
-	// Initialize database
+	// Initialize database connection
 	if err := models.InitDB(); err != nil {
 		logs.Error("Failed to initialize database:", err)
-		// Don't exit here, let main() handle it
+		os.Exit(1)
 	}
 }
 
@@ -44,7 +44,19 @@ func main() {
 	if beego.BConfig.RunMode == "dev" {
 		beego.BConfig.WebConfig.DirectoryIndex = true
 		beego.BConfig.WebConfig.StaticDir["/swagger"] = "swagger"
+
+		// Configure admin server only in dev mode
+		beego.BConfig.Listen.EnableAdmin = true
+		beego.BConfig.Listen.AdminAddr = "localhost"
+		beego.BConfig.Listen.AdminPort = 8088
+	} else {
+		// Disable admin server in non-dev modes
+		beego.BConfig.Listen.EnableAdmin = false
 	}
+
+	// Configure main server
+	beego.BConfig.Listen.HTTPAddr = "localhost"
+	beego.BConfig.Listen.HTTPPort = 8081
 
 	// Configure CORS middleware
 	// This allows cross-origin requests from frontend applications
@@ -68,6 +80,11 @@ func main() {
 	// Start the server
 	fmt.Println("\nStarting server...")
 	fmt.Printf("RunMode: %s\n", beego.BConfig.RunMode)
+	fmt.Printf("HTTP Server: http://%s:%d\n", beego.BConfig.Listen.HTTPAddr, beego.BConfig.Listen.HTTPPort)
+	if beego.BConfig.Listen.EnableAdmin {
+		fmt.Printf("Admin Server: http://%s:%d\n", beego.BConfig.Listen.AdminAddr, beego.BConfig.Listen.AdminPort)
+	}
+
 	beego.Run()
 }
 

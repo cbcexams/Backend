@@ -2,44 +2,59 @@ package models
 
 import (
 	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/beego/beego/v2/client/orm"
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-func init() {
-	// Register driver
-	err := orm.RegisterDriver("postgres", orm.DRPostgres)
-	if err != nil {
-		fmt.Printf("Failed to register driver: %v\n", err)
-		return
-	}
+var (
+	initOnce sync.Once
+	initErr  error
+)
 
-	// Register all models in one place
-	orm.RegisterModel(
-		new(Resource),
-		new(User),
-		new(Job),
-		new(Session),
-	)
+// InitDB initializes the database connection and registers models
+func InitDB() error {
+	initOnce.Do(func() {
+		// Register database driver
+		if err := orm.RegisterDriver("postgres", orm.DRPostgres); err != nil {
+			// Ignore if already registered
+			if !strings.Contains(err.Error(), "already registered") {
+				initErr = fmt.Errorf("failed to register driver: %v", err)
+				return
+			}
+		}
 
-	// Register default database
-	connStr := "user=postgres password=0000 dbname=cbcexams sslmode=disable"
-	err = orm.RegisterDataBase("default", "postgres", connStr)
-	if err != nil {
-		fmt.Printf("Failed to register database: %v\n", err)
-		return
-	}
+		// Try to register database
+		connStr := "user=postgres password=0000 dbname=cbcexams sslmode=disable"
+		err := orm.RegisterDataBase("default", "postgres", connStr)
+		if err != nil {
+			// Ignore if already registered
+			if !strings.Contains(err.Error(), "already registered") {
+				initErr = fmt.Errorf("failed to register database: %v", err)
+				return
+			}
+		}
 
-	// Test database connection
-	o := orm.NewOrm()
-	var result int
-	err = o.Raw("SELECT 1").QueryRow(&result)
-	if err != nil {
-		fmt.Printf("Database connection test failed: %v\n", err)
-		return
-	}
-	fmt.Println("Database connection successful!")
+		// Register all models in one place
+		orm.RegisterModel(
+			new(Resource),
+			// new(User),
+			// new(Job),
+			// new(Session),
+		)
+
+		// Test database connection
+		if err := TestDatabaseConnection(); err != nil {
+			initErr = fmt.Errorf("database connection test failed: %v", err)
+			return
+		}
+
+		fmt.Println("Database connection successful!")
+	})
+
+	return initErr
 }
 
 func TestDatabaseConnection() error {
