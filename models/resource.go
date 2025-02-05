@@ -12,8 +12,9 @@ import (
 // It maps to the web_crawler_resources table in the database
 type Resource struct {
 	Id                      string    `orm:"pk;column(id);type(uuid)" json:"id"`
+	UserID                  int       `orm:"column(user_id)" json:"user_id"`
 	ParentUrl               string    `orm:"column(parent_url);type(text);null" json:"parent_url"`
-	GoogleDriveDownloadLink string    `orm:"column(google_drive_download_link);type(text);unique;null" json:"google_drive_download_link"`
+	GoogleDriveDownloadLink *string   `orm:"column(google_drive_download_link);type(text);null" json:"google_drive_download_link,omitempty"`
 	Name                    string    `orm:"column(name);type(text)" json:"name"`
 	RelativePath            string    `orm:"column(relative_path);type(text);unique" json:"relative_path"`
 	CreatedAt               time.Time `orm:"column(created_at);type(timestamp with time zone);auto_now_add" json:"created_at"`
@@ -28,7 +29,6 @@ func (r *Resource) TableName() string {
 }
 
 // GetCategories returns the categories as a slice
-// If Categories is empty, returns nil
 func (r *Resource) GetCategories() []string {
 	if r.Categories == "" {
 		return nil
@@ -36,14 +36,13 @@ func (r *Resource) GetCategories() []string {
 	return strings.Split(r.Categories, ",")
 }
 
-// SetCategories sets the categories from a slice
-// If the slice is empty, sets Categories to empty string
+// SetCategories sets the categories
 func (r *Resource) SetCategories(categories []string) {
 	if len(categories) == 0 {
 		r.Categories = ""
 		return
 	}
-	r.Categories = strings.Join(categories, ",")
+	r.Categories = "{" + strings.Join(categories, ",") + "}"
 }
 
 // SearchResources searches resources with pagination
@@ -71,7 +70,6 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 
 	// Add name search if provided
 	if name, ok := params["name"]; ok && name != "" {
-		// Make the search more precise by using word boundaries
 		conditions = append(conditions, "(name ILIKE ? OR name ILIKE ? OR name ILIKE ?)")
 		searchTerm := name
 		queryParams = append(queryParams,
@@ -83,8 +81,12 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 
 	// Add categories search if provided
 	if categories, ok := params["categories"]; ok && categories != "" {
-		conditions = append(conditions, "categories::text ILIKE ?")
-		queryParams = append(queryParams, "%\""+categories+"\"%") // Look for exact category in JSON array
+		categories = strings.Trim(categories, "{}")
+		if categories != "" {
+			// Use string_to_array to convert the text field to an array for searching
+			conditions = append(conditions, "? = ANY(string_to_array(trim(both '{}' from categories), ','))")
+			queryParams = append(queryParams, categories)
+		}
 	}
 
 	// Combine conditions
@@ -117,6 +119,10 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 		countQuery += " AND " + strings.Join(conditions, " AND ")
 	}
 
+	// Debug the queries
+	fmt.Printf("Count Query: %s\n", countQuery)
+	fmt.Printf("Query Params: %+v\n", queryParams[:len(queryParams)-2])
+
 	err := o.Raw(countQuery, queryParams[:len(queryParams)-2]...).QueryRow(&total)
 	if err != nil {
 		fmt.Printf("❌ Error counting resources: %v\n", err)
@@ -136,13 +142,9 @@ func SearchResources(params map[string]string, page int) (*Pagination, error) {
 	}
 	fmt.Printf("✅ Retrieved %d records\n", num)
 
-	// Calculate pagination information
-	totalPages := int((total + int64(PageSize) - 1) / int64(PageSize))
-
-	// Return pagination result
 	return &Pagination{
 		CurrentPage: page,
-		TotalPages:  totalPages,
+		TotalPages:  int((total + int64(PageSize) - 1) / int64(PageSize)),
 		TotalItems:  total,
 		PageSize:    PageSize,
 		Items:       resources,
@@ -156,4 +158,20 @@ type Pagination struct {
 	TotalItems  int64       `json:"total_items"`
 	PageSize    int         `json:"page_size"`
 	Items       []*Resource `json:"items"`
+}
+
+// Add this to the Resource struct methods
+func (r *Resource) String() string {
+	return fmt.Sprintf(
+		"Resource{ID: %s, Name: %s, UserID: %d, RelativePath: %s, Categories: %v}",
+		r.Id, r.Name, r.UserID, r.RelativePath, r.Categories,
+	)
+}
+
+// BeforeInsert is called before inserting a new resource
+func (r *Resource) BeforeInsert() {
+	// For manually uploaded files, set GoogleDriveDownloadLink to NULL
+	if !strings.HasPrefix(r.ParentUrl, "https://") {
+		r.GoogleDriveDownloadLink = nil
+	}
 }

@@ -4,6 +4,8 @@ import (
 	"cbc-backend/models"
 	"cbc-backend/utils"
 	"encoding/json"
+	"fmt"
+	"os"
 	"strconv"
 
 	beego "github.com/beego/beego/v2/server/web"
@@ -109,4 +111,10 @@ func (c *JobController) Delete() {
 	}
 
 	utils.SendResponse(&c.Controller, true, "Job deleted successfully", nil, nil)
+}
+
+func init() {
+	if err := os.MkdirAll("uploads", 0755); err != nil {
+		fmt.Printf("Failed to create uploads directory: %v\n", err)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	beego "github.com/beego/beego/v2/server/web"
+	"github.com/beego/beego/v2/server/web/context"
 )
 
 func init() {
@@ -32,16 +33,26 @@ func init() {
 	// Add namespace to beego
 	beego.AddNamespace(ns)
 
+	// Add JWT middleware only for POST /v1/resources
+	beego.InsertFilter("/v1/resources", beego.BeforeRouter, func(ctx *context.Context) {
+		// Skip JWT check for GET requests
+		if ctx.Input.Method() == "GET" {
+			return
+		}
+		if ctx.Input.Method() == "POST" {
+			middleware.JWTMiddleware(ctx)
+		}
+	})
+
+	// Add logger middleware for all routes
+	beego.InsertFilter("/*", beego.BeforeRouter, middleware.LoggerMiddleware)
+
 	// Print registered routes
 	fmt.Println("\nRegistered Routes:")
-	fmt.Printf("GET  /v1/resources\n")
-	fmt.Printf("POST /v1/resources\n")
+	fmt.Printf("GET  /v1/resources?[params] (public)\n")
+	fmt.Printf("POST /v1/resources (protected)\n")
 	fmt.Printf("POST /v1/user/signup\n")
 	fmt.Printf("POST /v1/user/login\n")
-
-	// Add middleware
-	beego.InsertFilter("/*", beego.BeforeRouter, middleware.LoggerMiddleware)
-	beego.InsertFilter("/*", beego.BeforeRouter, middleware.JWTMiddleware)
 
 	fmt.Println("\nRouter initialization complete")
 	fmt.Println("==================================================")

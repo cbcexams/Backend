@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"cbc-backend/models"
+
 	"github.com/beego/beego/v2/client/orm"
 	"github.com/beego/beego/v2/core/logs"
 	beego "github.com/beego/beego/v2/server/web"
@@ -18,6 +20,12 @@ func init() {
 	if err := os.MkdirAll("uploads", 0755); err != nil {
 		logs.Error("Failed to create uploads directory:", err)
 	}
+
+	// Initialize database
+	if err := models.InitDB(); err != nil {
+		logs.Error("Failed to initialize database:", err)
+		// Don't exit here, let main() handle it
+	}
 }
 
 func main() {
@@ -26,17 +34,11 @@ func main() {
 	fmt.Println("                 Application Start                  ")
 	fmt.Println("==================================================")
 
-	// Test database connection and count resources
-	// This ensures the database is accessible before starting the server
-	o := orm.NewOrm()
-	var count int64
-	err := o.Raw("SELECT COUNT(*) FROM web_crawler_resources").QueryRow(&count)
-	if err != nil {
+	// Test database connection
+	if err := testDatabaseConnection(); err != nil {
 		fmt.Printf("❌ Database connection error: %v\n", err)
-		return
+		os.Exit(1)
 	}
-	fmt.Printf("✅ Database connected successfully\n")
-	fmt.Printf("✅ Found %d resources in web_crawler_resources table\n", count)
 
 	// Configure development mode settings
 	if beego.BConfig.RunMode == "dev" {
@@ -67,4 +69,16 @@ func main() {
 	fmt.Println("\nStarting server...")
 	fmt.Printf("RunMode: %s\n", beego.BConfig.RunMode)
 	beego.Run()
+}
+
+func testDatabaseConnection() error {
+	o := orm.NewOrm()
+	var count int64
+	err := o.Raw("SELECT COUNT(*) FROM web_crawler_resources").QueryRow(&count)
+	if err != nil {
+		return fmt.Errorf("database test failed: %v", err)
+	}
+	fmt.Printf("✅ Database connected successfully\n")
+	fmt.Printf("✅ Found %d resources in web_crawler_resources table\n", count)
+	return nil
 }

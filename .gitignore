@@ -1,0 +1,59 @@
+# Binaries and executables
+*.exe
+*.out
+*.dll
+*.so
+*.dylib
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+
+# Beego and Go-related files
+bin/
+pkg/
+tmp/
+logs/
+*.log
+
+# Dependency management
+vendor/
+go.sum
+go.work
+go.work.sum
+
+# Beego generated files
+conf/app.conf
+storage/
+
+# Docker-related
+docker-compose.override.yml
+.env
+.env.local
+.env.test
+.env.production
+*.dockerfile
+
+# Cache and build artifacts
+*.test
+node_modules/
+coverage/
+*.coverprofile
+*.cov
+*.cache
+
+# cgo-generated files
+_cgo_*
+
+# Other temporary files
+*.bak
+*.tmp
+
+
