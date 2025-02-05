@@ -55,7 +55,8 @@ func (r *ResourceController) Get() {
 
 	// Create params map with all search parameters
 	params := map[string]string{
-		"name": r.GetString("name"),
+		"name":       r.GetString("name"),
+		"categories": r.GetString("categories"),
 	}
 
 	// Log the received parameters for debugging
@@ -70,8 +71,16 @@ func (r *ResourceController) Get() {
 
 	// Build query
 	qs := o.QueryTable("web_crawler_resources")
+
+	// Apply filters
 	if name, ok := params["name"]; ok && name != "" {
 		qs = qs.Filter("name__icontains", name)
+	}
+
+	if categories, ok := params["categories"]; ok && categories != "" {
+		// Format the category for PostgreSQL array contains query
+		// This will match if the categories array contains the specified category
+		qs = qs.Filter("categories__contains", fmt.Sprintf("{%s}", categories))
 	}
 
 	// Get total count

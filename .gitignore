@@ -57,5 +57,4 @@ _cgo_*
 *.tmp
 
 *~
-
-
+uploads/
