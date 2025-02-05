@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"cbc-backend/config"
 	"fmt"
 	"strings"
 
@@ -42,7 +43,7 @@ func JWTMiddleware(ctx *context.Context) {
 		}
 
 		// Return the secret key used for signing
-		return []byte("your-secret-key"), nil // Use the same key as in User.GenerateToken()
+		return config.JWTSecret, nil
 	})
 
 	if err != nil {

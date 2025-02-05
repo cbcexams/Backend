@@ -1,6 +1,7 @@
 package models
 
 import (
+	"cbc-backend/config"
 	"errors"
 	"time"
 
@@ -38,18 +39,15 @@ func (u *User) ValidatePassword(password string) error {
 }
 
 func (u *User) GenerateToken() (string, error) {
-	token := jwt.New(jwt.SigningMethodHS256)
-	claims := token.Claims.(jwt.MapClaims)
-	claims["username"] = u.Username
-	claims["role"] = u.Role
-	claims["exp"] = time.Now().Add(time.Hour * 24).Unix()
-
-	tokenString, err := token.SignedString([]byte("your-secret-key")) // Use environment variable in production
-	if err != nil {
-		return "", err
+	claims := jwt.MapClaims{
+		"user_id":  u.ID,
+		"username": u.Username,
+		"exp":      time.Now().Add(24 * time.Hour).Unix(),
+		"iat":      time.Now().Unix(),
 	}
 
-	return tokenString, nil
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(config.JWTSecret)
 }
 
 // GetUserByUsername retrieves a user by username
@@ -84,7 +82,7 @@ func ValidateToken(tokenString string) (*jwt.Token, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return []byte("your-secret-key"), nil
+		return config.JWTSecret, nil
 	})
 	return token, err
 }

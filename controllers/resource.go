@@ -32,7 +32,7 @@ func (c *ResourceController) BadRequest(msg string, err error) {
 func (c *ResourceController) GetUserID() int {
 	authHeader := c.Ctx.Input.Header("Authorization")
 	if authHeader == "" {
-		return 0 // Or handle error as needed
+		return 0
 	}
 
 	// Remove "Bearer " prefix
@@ -41,7 +41,8 @@ func (c *ResourceController) GetUserID() int {
 	// Get user ID from token
 	userID, err := utils.GetUserIDFromToken(tokenString)
 	if err != nil {
-		return 0 // Or handle error as needed
+		fmt.Printf("Error getting user ID from token: %v\n", err)
+		return 0
 	}
 
 	return userID
@@ -114,6 +115,21 @@ func (r *ResourceController) Get() {
 
 // Post handles file upload
 func (c *ResourceController) Post() {
+	// Get user ID from token
+	userID := c.GetUserID()
+	if userID == 0 {
+		utils.SendResponse(&c.Controller, false, "Invalid or missing authentication", nil, nil)
+		return
+	}
+
+	// Check if user exists
+	o := orm.NewOrm()
+	exists := o.QueryTable("users").Filter("id", userID).Exist()
+	if !exists {
+		utils.SendResponse(&c.Controller, false, "User not found", nil, nil)
+		return
+	}
+
 	// Ensure uploads table exists
 	if err := models.EnsureUploadsTable(); err != nil {
 		utils.SendResponse(&c.Controller, false, "Failed to ensure uploads table exists", nil, err)
@@ -169,7 +185,7 @@ func (c *ResourceController) Post() {
 		FilePath:    filePath,
 		FileSize:    fileInfo.Size(),
 		ContentType: header.Header.Get("Content-Type"),
-		UserID:      c.GetUserID(),
+		UserID:      userID,
 	}
 
 	// Save to database

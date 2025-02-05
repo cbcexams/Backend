@@ -9,12 +9,12 @@ import (
 // Upload represents a file upload in the system
 type Upload struct {
 	Id          string    `orm:"pk;column(id)" json:"id"`
-	FileName    string    `orm:"size(255)" json:"file_name"`
-	FilePath    string    `orm:"size(255);unique" json:"file_path"`
-	FileSize    int64     `orm:"" json:"file_size"`
-	ContentType string    `orm:"size(100)" json:"content_type"`
+	FileName    string    `orm:"column(file_name)" json:"file_name"`
+	FilePath    string    `orm:"column(file_path);unique" json:"file_path"`
+	FileSize    int64     `orm:"column(file_size)" json:"file_size"`
+	ContentType string    `orm:"column(content_type)" json:"content_type"`
 	UserID      int       `orm:"column(user_id)" json:"user_id"`
-	CreatedAt   time.Time `orm:"auto_now_add;type(timestamp)" json:"created_at"`
+	CreatedAt   time.Time `orm:"auto_now_add;type(timestamp with time zone);column(created_at)" json:"created_at"`
 }
 
 // TableName specifies the database table name
@@ -35,14 +35,26 @@ func EnsureUploadsTable() error {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	)`
 
+	// Drop existing table if it exists
+	dropSQL := `DROP TABLE IF EXISTS uploads`
 	o := orm.NewOrm()
-	_, err := o.Raw(sql).Exec()
+
+	// Drop and recreate
+	_, err := o.Raw(dropSQL).Exec()
+	if err != nil {
+		return err
+	}
+
+	_, err = o.Raw(sql).Exec()
 	return err
 }
 
 // CreateUpload creates a new upload record
 func CreateUpload(upload *Upload) error {
 	o := orm.NewOrm()
-	_, err := o.Insert(upload)
+	// Use Insert instead of InsertOrUpdate since we're providing the UUID
+	_, err := o.Raw(`INSERT INTO uploads (id, file_name, file_path, file_size, content_type, user_id, created_at) 
+					 VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		upload.Id, upload.FileName, upload.FilePath, upload.FileSize, upload.ContentType, upload.UserID).Exec()
 	return err
 }

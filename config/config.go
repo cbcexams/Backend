@@ -22,13 +22,17 @@ var (
 // LoadConfig loads configuration from environment variables
 func LoadConfig() error {
 	// Load .env file if it exists
-	godotenv.Load()
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Printf("Error loading .env file: %v\n", err)
+	}
 
 	// JWT settings
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		return fmt.Errorf("JWT_SECRET environment variable is required")
 	}
+	fmt.Printf("Loaded JWT secret (first 10 chars): %s...\n", jwtSecret[:10])
 	JWTSecret = []byte(jwtSecret)
 
 	// Database settings

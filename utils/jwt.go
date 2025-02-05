@@ -47,11 +47,22 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse token: %v", err)
+		// Add more detailed error logging
+		if ve, ok := err.(*jwt.ValidationError); ok {
+			if ve.Errors&jwt.ValidationErrorExpired != 0 {
+				return nil, fmt.Errorf("token expired")
+			} else if ve.Errors&jwt.ValidationErrorSignatureInvalid != 0 {
+				return nil, fmt.Errorf("invalid signature")
+			}
+		}
+		return nil, fmt.Errorf("token validation error: %v", err)
 	}
 
 	// Get the claims
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		// Add claims debugging
+		fmt.Printf("Token claims: UserID=%d, Username=%s, ExpiresAt=%v\n",
+			claims.UserID, claims.Username, time.Unix(claims.ExpiresAt, 0))
 		return claims, nil
 	}
 
