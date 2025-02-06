@@ -1,4 +1,4 @@
-package test
+package tests
 
 import (
 	"encoding/json"
@@ -56,4 +56,39 @@ func TestInvalidLogin(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.Contains(t, response, "error")
+}
+
+func TestUserFlow(t *testing.T) {
+	// Test signup
+	signupBody := `{
+		"username": "testuser",
+		"password": "password123",
+		"email": "test@example.com",
+		"role": "teacher"
+	}`
+
+	w := makeTestRequest(t, "POST", "/v1/user/signup", signupBody, "")
+	assert.Equal(t, 200, w.Code)
+
+	// Test login
+	loginBody := `{
+		"username": "testuser",
+		"password": "password123"
+	}`
+
+	w = makeTestRequest(t, "POST", "/v1/user/login", loginBody, "")
+	assert.Equal(t, 200, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Contains(t, response, "data")
+
+	data := response["data"].(map[string]interface{})
+	token := data["token"].(string)
+	assert.NotEmpty(t, token)
+
+	// Test logout
+	w = makeTestRequest(t, "GET", "/v1/user/logout", "", token)
+	assert.Equal(t, 200, w.Code)
 }

@@ -1,4 +1,4 @@
-package test
+package tests
 
 import (
 	"bytes"
@@ -18,9 +18,9 @@ import (
 func TestResourceUpload(t *testing.T) {
 	token := createTestUser(t)
 
-	// Create a test file
+	// Create test file
 	content := []byte("test content")
-	tmpfile, err := os.CreateTemp("", "test*.txt")
+	tmpfile, err := os.CreateTemp("", "test*.pdf")
 	assert.NoError(t, err)
 	defer os.Remove(tmpfile.Name())
 	_, err = tmpfile.Write(content)
@@ -29,14 +29,16 @@ func TestResourceUpload(t *testing.T) {
 	// Create multipart form
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
+
+	// Add file
 	part, err := writer.CreateFormFile("file", filepath.Base(tmpfile.Name()))
 	assert.NoError(t, err)
-	_, err = io.Copy(part, tmpfile)
+	_, err = io.Copy(part, bytes.NewReader(content))
 	assert.NoError(t, err)
 
-	writer.WriteField("title", "Test Resource")
-	writer.WriteField("description", "Test Description")
-	writer.WriteField("level", "grade1-6")
+	// Add other fields
+	writer.WriteField("name", "Test Resource")
+	writer.WriteField("categories", "math,test")
 	writer.Close()
 
 	// Make request

@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"cbc-backend/config"
@@ -17,50 +16,21 @@ var (
 )
 
 // InitDB initializes the database connection and creates tables
-func InitDB() error {
-	initOnce.Do(func() {
-		// Register database driver
-		if err := orm.RegisterDriver("postgres", orm.DRPostgres); err != nil {
-			// Ignore if already registered
-			if !strings.Contains(err.Error(), "already registered") {
-				initErr = fmt.Errorf("failed to register driver: %v", err)
-				return
-			}
-		}
+func InitDB(connStr string) error {
+	if connStr == "" {
+		connStr = config.GetDBConnString()
+	}
 
-		// Try to register database
-		connStr := fmt.Sprintf(
-			"user=%s password=%s dbname=%s host=%s port=%s sslmode=disable",
-			config.DBUser,
-			config.DBPassword,
-			config.DBName,
-			config.DBHost,
-			config.DBPort,
-		)
-		err := orm.RegisterDataBase("default", "postgres", connStr)
-		if err != nil {
-			// Ignore if already registered
-			if !strings.Contains(err.Error(), "already registered") {
-				initErr = fmt.Errorf("failed to register database: %v", err)
-				return
-			}
-		}
+	// Register database driver
+	orm.RegisterDriver("postgres", orm.DRPostgres)
 
-		// Ensure tables exist
-		if err := EnsureUsersTable(); err != nil {
-			initErr = fmt.Errorf("failed to create users table: %v", err)
-			return
-		}
+	// Register default database
+	err := orm.RegisterDataBase("default", "postgres", connStr)
+	if err != nil {
+		return err
+	}
 
-		if err := EnsureUploadsTable(); err != nil {
-			initErr = fmt.Errorf("failed to create uploads table: %v", err)
-			return
-		}
-
-		fmt.Println("Database connection successful!")
-	})
-
-	return initErr
+	return nil
 }
 
 func TestDatabaseConnection() error {
