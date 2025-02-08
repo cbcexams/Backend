@@ -30,8 +30,18 @@ func init() {
 	}
 
 	// Initialize database connection
-	if err := models.InitDB(); err != nil {
+	if err := models.InitDB(config.GetDBConnString()); err != nil {
 		logs.Error("Failed to initialize database:", err)
+		os.Exit(1)
+	}
+
+	// Initialize database tables
+	if err := models.EnsureUsersTable(); err != nil {
+		logs.Error("Failed to create users table:", err)
+		os.Exit(1)
+	}
+	if err := models.EnsurePasswordResetTable(); err != nil {
+		logs.Error("Failed to create password_resets table:", err)
 		os.Exit(1)
 	}
 }
@@ -39,18 +49,12 @@ func init() {
 func main() {
 	fmt.Println("\n=== CBC Backend Service Initialization ===")
 
-	// Initialize database connection
-	if err := models.InitDB(); err != nil {
-		logs.Error("Database initialization failed:", err)
-		os.Exit(1)
-	}
-	logs.Info("✓ Database connected successfully")
-
 	// Test database connection
 	if err := testDatabaseConnection(); err != nil {
 		logs.Error("Database test failed:", err)
 		os.Exit(1)
 	}
+	logs.Info("✓ Database connected successfully")
 
 	// Configure CORS
 	beego.InsertFilter("*", beego.BeforeRouter, cors.Allow(&cors.Options{

@@ -10,16 +10,18 @@ import (
 
 // Claims represents the JWT claims
 type Claims struct {
-	UserID   int    `json:"user_id"`
+	UserID   string `json:"user_id"`
 	Username string `json:"username"`
+	Role     string `json:"role"`
 	jwt.StandardClaims
 }
 
 // GenerateJWT generates a new JWT token
-func GenerateJWT(userID int, username string) (string, error) {
+func GenerateJWT(userID string, username string, role string) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
+		Role:     role,
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
 			IssuedAt:  time.Now().Unix(),
@@ -61,7 +63,7 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 	// Get the claims
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		// Add claims debugging
-		fmt.Printf("Token claims: UserID=%d, Username=%s, ExpiresAt=%v\n",
+		fmt.Printf("Token claims: UserID=%s, Username=%s, ExpiresAt=%v\n",
 			claims.UserID, claims.Username, time.Unix(claims.ExpiresAt, 0))
 		return claims, nil
 	}
@@ -70,10 +72,10 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 }
 
 // GetUserIDFromToken extracts the user ID from a token string
-func GetUserIDFromToken(tokenString string) (int, error) {
+func GetUserIDFromToken(tokenString string) (string, error) {
 	claims, err := ValidateJWT(tokenString)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	return claims.UserID, nil
 }

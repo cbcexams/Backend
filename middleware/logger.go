@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/beego/beego/v2/server/web/context"
@@ -42,6 +43,31 @@ func LoggerMiddleware(ctx *context.Context) {
 			// Get query parameters
 			queryValues := ctx.Request.URL.Query()
 			fmt.Printf("Query: %+v\n", queryValues)
+		}
+	}()
+}
+
+// ErrorMiddleware handles errors and returns JSON responses
+func ErrorMiddleware(ctx *context.Context) {
+	defer func() {
+		if ctx.ResponseWriter.Status == 404 {
+			// Clean up URL - remove curly braces if present
+			url := ctx.Input.URL()
+			cleanURL := strings.ReplaceAll(strings.ReplaceAll(url, "{", ""), "}", "")
+
+			ctx.Output.SetStatus(404)
+			ctx.Output.JSON(map[string]interface{}{
+				"success": false,
+				"message": "Route not found",
+				"error":   fmt.Sprintf("The requested endpoint %s was not found", cleanURL),
+			}, true, false)
+		} else if ctx.ResponseWriter.Status == 401 {
+			ctx.Output.SetStatus(401)
+			ctx.Output.JSON(map[string]interface{}{
+				"success": false,
+				"message": "Unauthorized",
+				"error":   "Authentication is required to access this resource",
+			}, true, false)
 		}
 	}()
 }

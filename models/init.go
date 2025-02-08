@@ -11,5 +11,6 @@ func init() {
 		new(Upload),
 		new(Resource), // For reading only
 		new(Job),
+		new(PasswordReset),
 	)
 }

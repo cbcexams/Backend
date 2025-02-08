@@ -29,10 +29,10 @@ func (c *ResourceController) BadRequest(msg string, err error) {
 }
 
 // GetUserID gets the user ID from JWT token
-func (c *ResourceController) GetUserID() int {
+func (c *ResourceController) GetUserID() string {
 	authHeader := c.Ctx.Input.Header("Authorization")
 	if authHeader == "" {
-		return 0
+		return ""
 	}
 
 	// Remove "Bearer " prefix
@@ -42,7 +42,7 @@ func (c *ResourceController) GetUserID() int {
 	userID, err := utils.GetUserIDFromToken(tokenString)
 	if err != nil {
 		fmt.Printf("Error getting user ID from token: %v\n", err)
-		return 0
+		return ""
 	}
 
 	return userID
@@ -117,7 +117,7 @@ func (r *ResourceController) Get() {
 func (c *ResourceController) Post() {
 	// Get user ID from token
 	userID := c.GetUserID()
-	if userID == 0 {
+	if userID == "" {
 		utils.SendResponse(&c.Controller, false, "Invalid or missing authentication", nil, nil)
 		return
 	}

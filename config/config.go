@@ -52,3 +52,14 @@ func getEnvWithDefault(key, defaultValue string) string {
 	}
 	return value
 }
+
+func GetDBConnString() string {
+	return fmt.Sprintf(
+		"user=%s password=%s dbname=%s host=%s port=%s sslmode=disable",
+		DBUser,
+		DBPassword,
+		DBName,
+		DBHost,
+		DBPort,
+	)
+}

@@ -2,18 +2,13 @@ package models
 
 import (
 	"fmt"
-	"sync"
-
 	"cbc-backend/config"
 
 	"github.com/beego/beego/v2/client/orm"
 	_ "github.com/lib/pq" // PostgreSQL driver
 )
 
-var (
-	initOnce sync.Once
-	initErr  error
-)
+
 
 // InitDB initializes the database connection and creates tables
 func InitDB(connStr string) error {

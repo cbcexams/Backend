@@ -13,7 +13,7 @@ type Upload struct {
 	FilePath    string    `orm:"column(file_path);unique" json:"file_path"`
 	FileSize    int64     `orm:"column(file_size)" json:"file_size"`
 	ContentType string    `orm:"column(content_type)" json:"content_type"`
-	UserID      int       `orm:"column(user_id)" json:"user_id"`
+	UserID      string    `orm:"column(user_id);size(36)" json:"user_id"`
 	CreatedAt   time.Time `orm:"auto_now_add;type(timestamp with time zone);column(created_at)" json:"created_at"`
 }
 
@@ -31,7 +31,7 @@ func EnsureUploadsTable() error {
 		file_path VARCHAR(255) UNIQUE NOT NULL,
 		file_size BIGINT NOT NULL,
 		content_type VARCHAR(100),
-		user_id INTEGER NOT NULL REFERENCES users(id),
+		user_id VARCHAR(36) NOT NULL REFERENCES users(id),
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	)`
 
