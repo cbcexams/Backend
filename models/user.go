@@ -67,7 +67,10 @@ func CreateUser(user *User) error {
 	user.ID = uuid.New().String()
 
 	o := orm.NewOrm()
-	_, err := o.Insert(user)
+	// Use Raw instead of Insert to avoid LastInsertId issue
+	_, err := o.Raw(`INSERT INTO users (id, username, password, email, role, created_at) 
+					 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+		user.ID, user.Username, user.Password, user.Email, user.Role).Exec()
 	return err
 }
 
@@ -120,6 +123,11 @@ type PasswordReset struct {
 }
 
 func CreatePasswordReset(email string) (string, error) {
+	// Ensure password reset table exists first
+	if err := EnsurePasswordResetTable(); err != nil {
+		return "", fmt.Errorf("failed to create password reset table: %v", err)
+	}
+
 	o := orm.NewOrm()
 
 	// Find user by email
@@ -205,7 +213,6 @@ func EnsurePasswordResetTable() error {
 func DeleteUserByID(userID string) error {
 	o := orm.NewOrm()
 
-	// No need to convert to int anymore since we're using UUID
 	// Delete password resets first using raw SQL
 	_, err := o.Raw("DELETE FROM password_resets WHERE user_id = ?", userID).Exec()
 	if err != nil {
